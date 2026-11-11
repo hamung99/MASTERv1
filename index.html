@@ -362,7 +362,7 @@
     :root[data-theme="dark"] th { background-color:#1f4e8c; }
 
     /* === Pelacak faktur batal === */
-    tr.row-batal td, tr.row-pair td:nth-child(n+4):nth-child(-n+10) { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
+    tr.row-batal td, tr.row-pair td.ln { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
     tr.row-batal td { background:#f3f4f6; }
     tr.row-batal td.total-faktur-cell { background:#f3f4f6 !important; }
     .bd { display:inline-block; margin-left:5px; padding:0 6px; border-radius:4px; font-size:.64rem; font-weight:700; text-decoration:none; vertical-align:middle; }
@@ -383,7 +383,7 @@
     #table-batal td.wrap { white-space:normal; min-width:260px; }
     #pbToast { position:fixed; bottom:16px; right:16px; background:#1e293b; color:#fff; padding:9px 14px; border-radius:8px; font-size:.82rem; opacity:0; transition:opacity .2s; pointer-events:none; z-index:300; }
     #pbToast.show { opacity:1; }
-    :root[data-theme="dark"] tr.row-batal td, :root[data-theme="dark"] tr.row-pair td:nth-child(n+4):nth-child(-n+10) { color:#6b7280; }
+    :root[data-theme="dark"] tr.row-batal td, :root[data-theme="dark"] tr.row-pair td.ln { color:#6b7280; }
     :root[data-theme="dark"] tr.row-batal td, :root[data-theme="dark"] tr.row-batal td.total-faktur-cell { background:#12161c !important; }
     :root[data-theme="dark"] .pb-bar select, :root[data-theme="dark"] .pb-btn { background:#161b22; color:var(--text); border-color:var(--border); }
     :root[data-theme="dark"] .pb-btn:hover:not(:disabled) { background:#21262d; }
@@ -584,7 +584,7 @@
             </div>
             <div class="dropdown-section">
               <h4>Backup</h4>
-              <button class="btn-sm" type="button" onclick="window.LaporanBackup&&LaporanBackup.open()">💾 Backup / Pulihkan Data</button>
+              <button class="btn-sm" type="button" onclick="window.LaporanBackup&&LaporanBackup.open()">☁️ Backup / Sync Data</button>
               <button class="btn-sm" type="button" id="installBtn" style="display:none;margin-top:.4rem">📲 Pasang Aplikasi di Perangkat Ini</button>
             </div>
             <div class="dropdown-section">
@@ -1300,21 +1300,22 @@
 
       let html = '<table><thead><tr>' +
         '<th class="um-chk" title="Centang semua faktur di halaman ini"><input type="checkbox" class="um-pick-all"></th>' +
-        '<th>Tanggal</th>' +
+        '<th>Tgl</th>' +
         '<th>No. Faktur</th>' +
+        '<th>Sales</th>' +
+        '<th>Customer</th>' +
+        '<th>Alamat</th>' +
+        '<th>Kategori Produk</th>' +
+        '<th>Total Faktur</th>' +
+        '<th>Pembayaran</th>' +
         '<th>Produk</th>' +
         '<th>Jumlah</th>' +
         '<th>Satuan</th>' +
-        '<th>Harga Beli</th>' +
-        '<th>Discount</th>' +
         '<th>Harga Jual</th>' +
+        '<th>Discount</th>' +
         '<th>Total</th>' +
-        '<th>TOTAL FAKTUR</th>' +
-        '<th>Sales</th>' +
-        '<th>Customer</th>' +
         '<th>Kd Customer</th>' +
-        '<th>Alamat</th>' +
-        '<th>Pembayaran</th>' +
+        '<th>Harga Beli</th>' +
         '</tr></thead><tbody>';
 
       pageData.forEach((r, i) => {
@@ -1330,15 +1331,6 @@
               : '<input type="checkbox" class="um-pick" data-fk="' + pe(fk) + '"' + (umPick.has(fk) ? ' checked' : '') + '>';
         }
         html += '<td class="um-chk">' + umc + '</td>';
-        html += '<td class="center">' + (show ? (r.Tanggal || '') : '') + '</td>';
-        html += '<td class="center">' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
-        html += '<td class="col-produk">' + (r.Produk || '') + '</td>'; 
-        html += '<td class="center">' + formatNum(r.Jumlah) + '</td>';
-        html += '<td class="center">' + (r.Satuan || '') + '</td>';
-        html += (r._hbOrig !== undefined ? '<td class="num hb-mod" title="Harga beli diubah (asal: ' + formatNum(r._hbOrig) + ')">' : '<td class="num">') + formatNum(r['Harga Beli']) + '</td>';
-        html += '<td class="center">' + formatNum(r.Discount) + '</td>';
-        html += '<td class="num">' + formatNum(r['Harga Jual']) + '</td>';
-        html += '<td class="num">' + formatNum(r.Total) + '</td>';
         let totTxt = '';
         if (show) {
           totTxt = formatNum(totalFaktur);
@@ -1346,12 +1338,23 @@
           else if (invKind[fk] === 'NOL') totTxt += '<span class="bd bd-nol" title="Total faktur nol — lihat tab Pelacak Batal">NOL</span>';
           else if (invKind[fk] === 'PARSIAL') totTxt += '<span class="bd bd-parsial" title="Ada item yang dibatalkan (dicoret). Total sudah bersih.">ITEM BATAL</span>';
         }
-        html += '<td class="num' + (show ? ' total-faktur-cell' : '') + '">' + totTxt + '</td>';
+        const kat = MINYAK_RE.test(String(r.Produk || '')) ? 'MINYAK' : 'RUPA-RUPA';
+        html += '<td class="center">' + (show ? (r.Tanggal || '') : '') + '</td>';
+        html += '<td class="center">' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
         html += '<td class="center">' + (show ? (r.Sales || '') : '') + '</td>';
         html += '<td class="col-customer">' + (show ? (r.Customer || '') : '') + '</td>';
-        html += '<td class="center">' + (show ? (r['Kd Customer'] || '') : '') + '</td>';
         html += '<td class="col-alamat">' + (show ? (r.Alamat || '') : '') + '</td>';
+        html += '<td class="center ln">' + kat + '</td>';
+        html += '<td class="num' + (show ? ' total-faktur-cell' : '') + '">' + totTxt + '</td>';
         html += '<td class="center">' + (show ? (r.Pembayaran || '') : '') + '</td>';
+        html += '<td class="col-produk ln">' + (r.Produk || '') + '</td>';
+        html += '<td class="center ln">' + formatNum(r.Jumlah) + '</td>';
+        html += '<td class="center ln">' + (r.Satuan || '') + '</td>';
+        html += '<td class="num ln">' + formatNum(r['Harga Jual']) + '</td>';
+        html += '<td class="center ln">' + formatNum(r.Discount) + '</td>';
+        html += '<td class="num ln">' + formatNum(r.Total) + '</td>';
+        html += '<td class="center">' + (show ? (r['Kd Customer'] || '') : '') + '</td>';
+        html += (r._hbOrig !== undefined ? '<td class="num ln hb-mod" title="Harga beli diubah (asal: ' + formatNum(r._hbOrig) + ')">' : '<td class="num ln">') + formatNum(r['Harga Beli']) + '</td>';
         html += '</tr>';
       });
       html += '</tbody></table>';
@@ -1777,6 +1780,7 @@
             tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
           });
         } finally { db.close(); }
+        try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('um'); bc.close(); } catch (e) {}
       } catch (e) { console.error('Gagal menyimpan Uang Masuk:', e); pbToast('Gagal menyimpan Uang Masuk permanen'); }
     }
     function umAfterChange() {
@@ -2187,6 +2191,7 @@
             tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
           });
         } finally { db.close(); }
+        try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('tg'); bc.close(); } catch (e) {}
       } catch (e) { console.error('Gagal menyimpan Data Tagihan:', e); pbToast('Gagal menyimpan Data Tagihan permanen'); }
     }
     function tgAfterChange() {
