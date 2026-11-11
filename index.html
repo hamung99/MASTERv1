@@ -564,7 +564,6 @@
           <span>s/d</span><input type="date" id="dateTo" title="Sampai tanggal">
           <button type="button" class="dr-x" id="dateClear" title="Hapus filter tanggal">✕</button>
         </div>
-        <select class="month-sel" id="salesFilter" title="Filter sales"><option value="">Semua Sales</option></select>
         <input type="text" class="search-box" id="globalSearch" placeholder="Cari produk / customer / faktur...">
         
         <div class="menu-wrap">
@@ -627,6 +626,7 @@
     <div id="mainContent" style="display:none;">
       <div class="tab-content active" id="tab-lengkap">
         <div class="lengkap-bar">
+          <select id="salesFilter" title="Filter sales"><option value="">Semua Sales</option></select>
           <select id="payFilter" title="Filter pembayaran">
             <option value="">Semua Pembayaran</option>
             <option value="CASH">Cash</option>
@@ -1835,7 +1835,9 @@
     /* ----- tampilan halaman ----- */
     function placeSearch(tab) {
       const bar = document.querySelector(tab === 'batal' ? '#tab-batal .pb-bar' : '#tab-lengkap .lengkap-bar');
-      if (bar && globalSearch.parentNode !== bar) bar.insertBefore(globalSearch, bar.firstChild);
+      if (!bar) return;
+      if (globalSearch.parentNode !== bar) bar.insertBefore(globalSearch, bar.firstChild);
+      if (salesSel.parentNode !== bar || salesSel.previousSibling !== globalSearch) bar.insertBefore(salesSel, globalSearch.nextSibling);
     }
     placeSearch('lengkap');
     const umTabBtn = document.getElementById('umTabBtn');
