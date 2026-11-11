@@ -1,6 +1,6 @@
 /* Service Worker - Laporan Penjualan (online + offline)
    Naikkan angka VER setiap kali upload versi baru agar perangkat lain yang sedang terbuka tahu ada update. */
-const VER = 'pj-v1';
+const VER = 'pj-v2';
 const SHELL = ['./', 'index.html', 'theme.js', 'backup.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
