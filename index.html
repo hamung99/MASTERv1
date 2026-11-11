@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
 <script src="theme.js"></script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#1b5e20">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Laporan PJ">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>Laporan Penjualan - Multi Bulan</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
@@ -579,6 +585,7 @@
             <div class="dropdown-section">
               <h4>Backup</h4>
               <button class="btn-sm" type="button" onclick="window.LaporanBackup&&LaporanBackup.open()">☁️ Backup / Sync Semua Data</button>
+              <button class="btn-sm" type="button" id="installBtn" style="display:none;margin-top:.4rem">📲 Pasang Aplikasi di Perangkat Ini</button>
             </div>
             <div class="dropdown-section">
               <h4>Data Terupload</h4>
@@ -2496,6 +2503,48 @@
   </script>
 <script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 <script src="backup.js"></script>
+<script>
+/* ===== PWA: bisa dipasang (install), tetap jalan offline, update otomatis saat online ===== */
+(function () {
+  var pill = document.createElement('div');
+  pill.id = 'netPill';
+  pill.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:9999;padding:.25rem .6rem;border-radius:999px;font:600 .75rem system-ui,sans-serif;background:#fff3e0;color:#e65100;border:1px solid #ffb74d;display:none';
+  pill.textContent = '● Offline — data tersimpan di perangkat';
+  document.body.appendChild(pill);
+  function net() { pill.style.display = navigator.onLine ? 'none' : 'block'; }
+  addEventListener('online', net); addEventListener('offline', net); net();
+
+  var dp = null, ib = document.getElementById('installBtn');
+  var standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); dp = e; if (ib && !standalone) ib.style.display = ''; });
+  addEventListener('appinstalled', function () { dp = null; if (ib) ib.style.display = 'none'; });
+  if (ib) ib.addEventListener('click', function () { if (dp) { dp.prompt(); dp.userChoice.finally(function () { dp = null; ib.style.display = 'none'; }); } });
+  /* iPhone/iPad (Safari) tidak punya prompt: tampilkan petunjuk */
+  if (ib && !standalone && /iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    ib.style.display = '';
+    ib.addEventListener('click', function () { alert('Di Safari: ketuk tombol Bagikan (kotak dengan panah) lalu pilih "Tambah ke Layar Utama".'); });
+  }
+
+  if (!('serviceWorker' in navigator)) return;
+  var hadCtl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.register('sw.js').then(function (reg) {
+    function banner() {
+      if (document.getElementById('updBar')) return;
+      var b = document.createElement('div'); b.id = 'updBar';
+      b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9999;background:#1b5e20;color:#fff;padding:.5rem .9rem;border-radius:8px;font:600 .85rem system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.3);display:flex;gap:.7rem;align-items:center';
+      b.innerHTML = '🔄 Versi baru tersedia <button style="border:0;border-radius:6px;padding:.25rem .6rem;font-weight:700;cursor:pointer">Muat ulang</button>';
+      b.querySelector('button').onclick = function () { location.reload(); };
+      document.body.appendChild(b);
+    }
+    reg.addEventListener('updatefound', function () {
+      var w = reg.installing; if (!w) return;
+      w.addEventListener('statechange', function () { if (w.state === 'installed' && hadCtl) banner(); });
+    });
+    setInterval(function () { if (navigator.onLine) reg.update().catch(function () {}); }, 30 * 60 * 1000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && navigator.onLine) reg.update().catch(function () {}); });
+  }).catch(function (e) { console.warn('Service worker gagal:', e); });
+})();
+</script>
 <script>
 /* Pesan awal "Tunggu Sebentar.. Ambil Data Server" tampil selama aplikasi mengecek/mengambil data dari server.
    Bila pengecekan selesai (atau gagal/offline) dan data tetap kosong, tampilkan petunjuk upload supaya tidak menggantung. */
