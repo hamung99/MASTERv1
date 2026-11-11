@@ -584,9 +584,8 @@
             </div>
             <div class="dropdown-section">
               <h4>Backup</h4>
-              <button class="btn-sm" type="button" onclick="window.LaporanBackup&&LaporanBackup.open()">☁️ Backup / Sync Semua Data</button>
+              <button class="btn-sm" type="button" onclick="window.LaporanBackup&&LaporanBackup.open()">💾 Backup / Pulihkan Data</button>
               <button class="btn-sm" type="button" id="installBtn" style="display:none;margin-top:.4rem">📲 Pasang Aplikasi di Perangkat Ini</button>
-              <button class="btn-sm" type="button" id="syncCodeBtn" style="margin-top:.4rem">🔑 Kode Sync Tagihan</button>
             </div>
             <div class="dropdown-section">
               <h4>Data Terupload</h4>
@@ -673,7 +672,6 @@
           <button type="button" class="pb-btn" id="tgPrint">🖨 Cetak</button>
           <button type="button" class="pb-btn danger" id="tgClear">Kosongkan</button>
           <div class="pb-info" id="tgInfo"></div>
-          <div class="pb-info" id="tgSyncSt"></div>
         </div>
         <div class="um-scroll"><div class="um-paper" id="tgPaper"></div></div>
       </div>
@@ -2178,7 +2176,6 @@
       if (!tgMeta.date) tgMeta.date = umTodayISO();
       tgSnapBuild();
       tgAfterChange();
-      setTimeout(tgSync, 800);
     }
     async function tgPut() {
       try {
@@ -2504,15 +2501,8 @@
     });
 
 
-    /* ===================== SINKRON DATA TAGIHAN (Supabase) ===================== */
-    const SB_URL = 'https://ipoeexoidflzpghzyxwq.supabase.co';
-    const SB_KEY = 'sb_publishable__ZagXSp6UF-S28fxr3ZSzQ_06tojN8z';
-    const SB_CODE_K = 'pj_sync_code';
-    let tgSnap = new Map(), tgSyncing = false, tgAgain = false, tgPushT = null, tgAsked = false;
-    const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
-    const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
-    const tgDevId = (() => { let d = lsGet('pj_dev'); if (!d) { d = 'd' + Math.random().toString(36).slice(2, 8); lsSet('pj_dev', d); } return d; })();
-    function tgStatus(t) { const e = document.getElementById('tgSyncSt'); if (e) e.textContent = t; }
+    /* ===================== Penyimpanan Tagihan (lokal di perangkat) ===================== */
+    let tgSnap = new Map();
     const tgStrip = it => { const o = Object.assign({}, it); delete o._u; return JSON.stringify(o); };
     function tgSnapBuild() { tgSnap = new Map(tgItems.map(it => [it.fk, tgStrip(it)])); }
     /* beri cap waktu pada item yang berubah + catat yang dihapus (agar bisa digabung antar perangkat) */
@@ -2527,84 +2517,10 @@
     async function tgSave() {
       tgStamp();
       await tgPut();
-      clearTimeout(tgPushT); tgPushT = setTimeout(tgSync, 1500);
     }
-    function tgMerge(a, b) {
-      const del = Object.assign({}, (b.meta && b.meta.del) || {});
-      Object.entries((a.meta && a.meta.del) || {}).forEach(([k, v]) => { if (!(del[k] >= v)) del[k] = v; });
-      const best = new Map(), order = [];
-      const take = it => {
-        const o = best.get(it.fk);
-        if (!o) { best.set(it.fk, it); order.push(it.fk); }
-        else if ((it._u || 0) > (o._u || 0)) best.set(it.fk, it);
-      };
-      (a.items || []).forEach(take); (b.items || []).forEach(take);
-      const items = [];
-      order.forEach(fk => { const it = best.get(fk); if (!((del[fk] || 0) >= (it._u || 0) && del[fk])) items.push(it); });
-      const ma = a.meta || {}, mb = b.meta || {};
-      const useB = (mb._du || 0) > (ma._du || 0);
-      return { items, meta: { date: (useB ? mb.date : ma.date) || ma.date || mb.date || '', _du: Math.max(ma._du || 0, mb._du || 0), del } };
-    }
-    const tgSig = d => JSON.stringify([(d.items || []).map(tgStrip).sort(), (d.meta && d.meta.date) || '', Object.keys((d.meta && d.meta.del) || {}).sort()]);
-    const tgHdr = code => ({ apikey: SB_KEY, 'x-pj-code': code, 'Content-Type': 'application/json' });
-    async function tgSync() {
-      if (tgSyncing) { tgAgain = true; return; }
-      if (!navigator.onLine) { tgStatus('○ Offline — tersimpan di perangkat, akan disinkron saat online'); return; }
-      const ae = document.activeElement;
-      if (ae && document.getElementById('tgPaper').contains(ae)) { setTimeout(tgSync, 4000); return; }
-      let code = lsGet(SB_CODE_K);
-      if (!code) {
-        if (tgAsked) { tgStatus('☁️ Sync belum aktif — isi "Kode Sync Tagihan" di Menu'); return; }
-        tgAsked = true;
-        code = (prompt('Kode Sync Tagihan (harus sama di semua perangkat).\nKosongkan bila tidak memakai sinkronisasi online.') || '').trim();
-        if (!code) { tgStatus('☁️ Sync belum aktif — isi "Kode Sync Tagihan" di Menu'); return; }
-        lsSet(SB_CODE_K, code);
-      }
-      tgSyncing = true; tgAgain = false;
-      try {
-        const r = await fetch(SB_URL + '/rest/v1/pj_sync?key=eq.tagihan&select=data', { headers: tgHdr(code) });
-        if (!r.ok) throw new Error('GET ' + r.status);
-        const rows = await r.json();
-        const remote = rows[0] && rows[0].data ? rows[0].data : { items: [], meta: {} };
-        const local = { items: tgItems, meta: tgMeta };
-        const merged = tgMerge(local, remote);
-        if (tgSig(merged) !== tgSig(local)) {
-          const a2 = document.activeElement;
-          if (a2 && document.getElementById('tgPaper').contains(a2)) { tgSyncing = false; setTimeout(tgSync, 4000); return; }
-          tgItems = merged.items; tgMeta = merged.meta; if (!tgMeta.date) tgMeta.date = umTodayISO();
-          tgSnapBuild(); tgAfterChange(); await tgPut();
-          if (currentTab === 'tagihan') tgRender(); else if (currentTab === 'lengkap') renderTab('lengkap');
-        }
-        if (tgSig(merged) !== tgSig(remote) || !rows[0]) {
-          const p = await fetch(SB_URL + '/rest/v1/pj_sync?on_conflict=key', {
-            method: 'POST', headers: Object.assign(tgHdr(code), { Prefer: 'resolution=merge-duplicates,return=minimal' }),
-            body: JSON.stringify({ key: 'tagihan', data: { items: tgItems, meta: tgMeta }, updated_at: new Date().toISOString(), device: tgDevId })
-          });
-          if (!p.ok) throw new Error('POST ' + p.status);
-        }
-        const d = new Date();
-        tgStatus('☁️ Tersinkron ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'));
-      } catch (e) {
-        console.warn('Sync Tagihan gagal:', e);
-        tgStatus(/40[13]|GET 404|POST 404/.test(String(e.message)) ? '⚠ Sync ditolak: kode salah / tabel pj_sync belum dibuat (jalankan SQL)' : '⚠ Sync gagal (akan dicoba lagi) — data tetap aman di perangkat');
-      }
-      tgSyncing = false;
-      if (tgAgain) setTimeout(tgSync, 300);
-    }
-    addEventListener('online', () => setTimeout(tgSync, 500));
-    document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(tgSync, 300); });
-    document.getElementById('tgPaper').addEventListener('focusout', () => setTimeout(tgSync, 1200));
-    setInterval(() => { if (!document.hidden) tgSync(); }, 60000);
-    document.getElementById('syncCodeBtn').addEventListener('click', () => {
-      const c = prompt('Kode Sync Tagihan (harus sama di semua perangkat):', lsGet(SB_CODE_K));
-      if (c === null) return;
-      lsSet(SB_CODE_K, c.trim()); tgAsked = true;
-      if (c.trim()) tgSync(); else tgStatus('☁️ Sync belum aktif — isi "Kode Sync Tagihan" di Menu');
-    });
 
     loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(loadPJ);
   </script>
-<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","spa":2}' crossorigin="anonymous"></script>
 <script src="backup.js"></script>
 <script>
 /* ===== PWA: bisa dipasang (install), tetap jalan offline, update otomatis saat online ===== */
