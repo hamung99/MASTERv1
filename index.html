@@ -1327,7 +1327,7 @@
       }
 
       let html = '<table><thead><tr>' +
-        '<th class="um-chk" title="Centang semua faktur di halaman ini"><input type="checkbox" class="um-pick-all"></th>' +
+        '<th class="um-chk" title="Centang semua faktur di tanggal yang sama (tanggal paling atas di halaman ini)"><input type="checkbox" class="um-pick-all"></th>' +
         '<th>Tgl</th>' +
         '<th>No. Faktur</th>' +
         '<th>Sales</th>' +
@@ -1846,7 +1846,13 @@
         if (t.checked) umPick.add(t.dataset.fk); else umPick.delete(t.dataset.fk);
         umUpdatePickN();
       } else if (t.classList.contains('um-pick-all')) {
-        document.querySelectorAll('#table-lengkap .um-pick').forEach(c => {
+        /* Centang semua hanya untuk tanggal yang sama (tanggal faktur paling atas di halaman ini).
+           Saat dilepas, semua centang di halaman ini dilepas. */
+        const boxes = Array.from(document.querySelectorAll('#table-lengkap .um-pick'));
+        const dateOf = c => { const td = c.closest('tr') && c.closest('tr').children[1]; return td ? td.textContent.trim() : ''; };
+        const target = boxes.length ? dateOf(boxes[0]) : '';
+        boxes.forEach(c => {
+          if (t.checked && dateOf(c) !== target) return;
           c.checked = t.checked;
           if (t.checked) umPick.add(c.dataset.fk); else umPick.delete(c.dataset.fk);
         });
