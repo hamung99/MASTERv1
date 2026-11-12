@@ -540,7 +540,13 @@
     :root[data-theme="dark"] .um-btn, :root[data-theme="dark"] .tab-sel { background-color:#161b22 !important; color:#e6edf3 !important; border-color:#30363d !important; }
     :root[data-theme="dark"] .um-btn:hover, :root[data-theme="dark"] .tab-sel:hover { background-color:#1f2630 !important; }
     :root[data-theme="dark"] .um-btn.active, :root[data-theme="dark"] .tab-sel.is-on { background-color:#1b3a5e !important; color:#cfe3ff !important; border-color:#388bfd !important; }
-</style>
+    /* Bar Data Penjualan: satu baris (kalau layar sempit, digeser ke samping, tidak turun ke baris baru) */
+    .lengkap-bar { flex-wrap: nowrap; overflow-x: auto; gap: .4rem; }
+    .lengkap-bar > * { flex: 0 0 auto; white-space: nowrap; }
+    .lengkap-bar .search-box { flex: 1 1 150px; width: auto; min-width: 110px; max-width: 250px; }
+    .lengkap-bar select { max-width: 150px; }
+    .lengkap-bar .pb-btn { padding: .3rem .55rem; }
+  </style>
 </head>
 <body>
 
@@ -637,8 +643,8 @@
             <option value="MINYAK">Minyak Fitri</option>
             <option value="RUPA">Rupa-Rupa</option>
           </select>
-          <button type="button" class="pb-btn um-send" id="umSendT" title="Kirim faktur TEMPO yang dicentang ke Data Tagihan Tempo">📋 Kirim ke Data Tagihan Tempo (<span id="umPickNT">0</span>)</button>
-          <button type="button" class="pb-btn um-send" id="umSendC" title="Kirim faktur CASH yang dicentang ke Data Tagihan Cash">📋 Kirim ke Data Tagihan Cash (<span id="umPickNC">0</span>)</button>
+          <button type="button" class="pb-btn um-send" id="umSendT" title="Kirim faktur TEMPO yang dicentang ke Data Tagihan Tempo">📋 Kirim ke Tagihan Tempo (<span id="umPickNT">0</span>)</button>
+          <button type="button" class="pb-btn um-send" id="umSendC" title="Kirim faktur CASH yang dicentang ke Data Tagihan Cash">📋 Kirim ke Tagihan Cash (<span id="umPickNC">0</span>)</button>
           <button type="button" class="pb-btn" id="umPickClear">Kosongkan centang</button>
         </div>
         <div class="table-wrapper"><div id="table-lengkap"></div></div>
