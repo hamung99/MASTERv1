@@ -453,8 +453,10 @@
     /* === Centang kirim ke Uang Masuk (Data Lengkap) === */
     th.um-chk, td.um-chk { width:34px; min-width:34px; text-align:center; padding:.2rem .3rem; }
     .um-chk input { cursor:pointer; width:15px; height:15px; }
-    .um-send { background:#1b5e20 !important; color:#fff !important; border-color:#1b5e20 !important; font-weight:600; }
-    .um-send:hover { background:#154a19 !important; }
+    .um-send { background:#e8f5e9 !important; color:#1b5e20 !important; border-color:#a5d6a7 !important; font-weight:600; }
+    .um-send:hover:not(:disabled) { background:#c8e6c9 !important; }
+    :root[data-theme="dark"] .um-send { background:#16301c !important; color:#a5d6a7 !important; border-color:#2e5e36 !important; }
+    :root[data-theme="dark"] .um-send:hover:not(:disabled) { background:#1d3d25 !important; }
 
     /* === Halaman Uang Masuk === */
     .um-tools label { display:flex; align-items:center; gap:.4rem; font-size:.8rem; }
@@ -546,6 +548,8 @@
     .lengkap-bar .search-box { flex: 1 1 150px; width: auto; min-width: 110px; max-width: 250px; }
     .lengkap-bar select { max-width: 150px; }
     .lengkap-bar .pb-btn { padding: .3rem .55rem; }
+    /* Tombol aksi (Kirim ke Tagihan Tempo/Cash + Kosongkan centang) rata kanan */
+    .lengkap-bar #umSendT { margin-left: auto; }
   </style>
 </head>
 <body>
