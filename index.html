@@ -550,6 +550,24 @@
     .lengkap-bar .pb-btn { padding: .3rem .55rem; }
     /* Tombol aksi (Kirim ke Tagihan Tempo/Cash + Kosongkan centang) rata kanan */
     .lengkap-bar #umSendT { margin-left: auto; }
+
+    /* === Bagian bawah tabel dirapikan + tabel lebih tinggi === */
+    .table-wrapper { scrollbar-width: thin; }
+    .pagination { background: var(--card); padding: .45rem .6rem; gap: .25rem; }
+    .pagination button { min-width: 28px; height: 28px; border-radius: 6px; font-size: .78rem; }
+    @media (min-width: 769px) {
+      .container { padding-bottom: .6rem; }
+      .table-wrapper { max-height: calc(100vh - 176px); }
+    }
+
+    /* === Tombol tema (bulan/matahari) dipindah ke header === */
+    .theme-in-header {
+      position: static !important; inset: auto !important; margin: 0 !important;
+      width: 26.6px !important; height: 26.6px !important; min-width: 0 !important;
+      padding: 0 !important; border-radius: 6px !important; box-shadow: none !important;
+      font-size: .9rem !important; line-height: 1 !important; flex: 0 0 auto;
+      display: inline-flex !important; align-items: center; justify-content: center;
+    }
   </style>
 </head>
 <body>
@@ -2579,6 +2597,40 @@
     setInterval(function () { if (navigator.onLine) reg.update().catch(function () {}); }, 30 * 60 * 1000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && navigator.onLine) reg.update().catch(function () {}); });
   }).catch(function (e) { console.warn('Service worker gagal:', e); });
+})();
+</script>
+<script>
+/* Pindahkan tombol tema (bulan/matahari) dari pojok kanan bawah ke header, di sebelah tombol Menu */
+(function () {
+  var host = document.querySelector('.right-controls');
+  if (!host) return;
+  var ICON = /^[\u{1F319}\u{1F31E}\u{1F313}\u{1F312}\u{1F315}\u2600\u263E\uFE0F\s]+$/u;
+  var done = false;
+  function find() {
+    var kids = document.body.children;
+    for (var i = 0; i < kids.length; i++) {
+      var el = kids[i];
+      if (el.closest && el.closest('.right-controls')) continue;
+      var t = (el.textContent || '').trim();
+      var tag = (el.id + ' ' + el.className).toLowerCase();
+      if (t && t.length <= 4 && ICON.test(t) && (el.tagName === 'BUTTON' || el.getAttribute('role') === 'button' || /theme|dark|mode|toggle/.test(tag))) return el;
+      if (el.tagName === 'BUTTON' && /theme|darkmode|dark-mode|themetoggle/.test(tag)) return el;
+    }
+    return null;
+  }
+  function move() {
+    if (done) return true;
+    var el = find();
+    if (!el) return false;
+    el.classList.add('theme-in-header');
+    host.appendChild(el);
+    done = true;
+    return true;
+  }
+  if (move()) return;
+  var mo = new MutationObserver(function () { if (move()) mo.disconnect(); });
+  mo.observe(document.body, { childList: true });
+  setTimeout(function () { mo.disconnect(); }, 8000);
 })();
 </script>
 <script>
