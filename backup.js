@@ -22,7 +22,7 @@
     { db: 'pjtagihan-v1', st: 'pjtagihan-data' }];
   var D_PARSE = { db: 'pj-parse-v1', st: 'c' };
 
-  var busy = false, restoring = false, pushT = null;
+  var busy = false, restoring = false, pushT = null, unsynced = false, warnT = null;
   var LB = { last: { kind: 'busy', msg: 'Memeriksa data…' } };
   window.LaporanBackup = LB;
 
@@ -187,7 +187,7 @@
     if (busy || restoring) return Promise.resolve(false);
     var code = getCode(manual);
     if (!code) { setState('empty', 'Kode sync belum diisi'); return Promise.resolve(false); }
-    if (!navigator.onLine) { setState('offline', 'Offline — akan dikirim saat online'); return Promise.resolve(false); }
+    if (!navigator.onLine) { setState('offline', 'Offline — akan dikirim saat online'); if (unsynced) showWarn('Offline — data belum tersimpan ke server.'); return Promise.resolve(false); }
     busy = true; setState('busy', 'Menyiapkan data…');
     return localSig().then(function (L) {
       if (!L.files.length) { busy = false; setState('empty', 'Belum ada file penjualan di perangkat ini, tidak ada yang dikirim'); return false; }
@@ -212,13 +212,13 @@
           .then(function (otherN) {
             var rev = Math.max(cr, lr) + 1;
             return putRow(code, 'laporan:meta', { rev: rev, at: Date.now(), device: devId(), files: files, other_n: otherN }).then(function () {
-              lsSet(K_REV, String(rev)); lsSet(K_SIG, L.sig); hideBar(); busy = false;
+              lsSet(K_REV, String(rev)); lsSet(K_SIG, L.sig); hideBar(); unsynced = false; hideWarn(); busy = false;
               setState('ok', '☁️ Tersinkron ' + hhmm() + ' • ' + files.length + ' file');
               return true;
             });
           });
       });
-    }).catch(function (e) { busy = false; console.warn('Kirim gagal:', e); setState('error', errMsg(e)); return false; });
+    }).catch(function (e) { busy = false; console.warn('Kirim gagal:', e); setState('error', errMsg(e)); if (unsynced) showWarn('Data belum tersimpan ke server. ' + errMsg(e)); return false; });
   }
 
   /* ---------- AMBIL ---------- */
@@ -249,7 +249,7 @@
               .then(function () { return Promise.all(OTHERS.map(function (d) { return obj[d.db] !== undefined ? idbPut(d, dec(obj[d.db])) : Promise.resolve(); })); })
               .then(function () { return idbClear(D_PARSE); })
               .then(function () { return localSig(); })
-              .then(function (L) { lsSet(K_REV, String(meta.rev || 0)); lsSet(K_SIG, L.sig); setState('busy', 'Data diterima, memuat ulang…'); setTimeout(function () { location.reload(); }, 300); return true; });
+              .then(function (L) { lsSet(K_REV, String(meta.rev || 0)); lsSet(K_SIG, L.sig); unsynced = false; hideWarn(); setState('busy', 'Data diterima, memuat ulang…'); setTimeout(function () { location.reload(); }, 300); return true; });
           });
       });
     }).catch(function (e) { busy = false; restoring = false; console.warn('Ambil gagal:', e); setState('error', errMsg(e)); return false; });
@@ -295,6 +295,23 @@
   }
 
   /* ---------- tampilan ---------- */
+  function hideWarn() { clearTimeout(warnT); var b = document.getElementById('lbWarn'); if (b) b.style.display = 'none'; }
+  function showWarn(msg) {
+    var b = document.getElementById('lbWarn');
+    if (!b) {
+      b = document.createElement('div'); b.id = 'lbWarn';
+      b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:10002;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:center;max-width:calc(100vw - 20px);padding:.55rem .85rem;border-radius:10px;background:#e65100;color:#fff;font:600 .85rem system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.3)';
+      b.innerHTML = '<span id="lbWarnMsg"></span><button type="button" id="lbWarnBtn" style="border:0;border-radius:6px;padding:.35rem .7rem;font-weight:700;cursor:pointer;background:#fff;color:#bf360c">☁️ Backup / Sync Data Sekarang</button>';
+      document.body.appendChild(b);
+      document.getElementById('lbWarnBtn').onclick = function () {
+        var bt = this; bt.disabled = true; bt.textContent = 'Mengirim…';
+        var reset = function () { bt.disabled = false; bt.textContent = '☁️ Backup / Sync Data Sekarang'; };
+        push(true).then(reset, reset);
+      };
+    }
+    document.getElementById('lbWarnMsg').textContent = '⚠ ' + msg;
+    b.style.display = 'flex';
+  }
   function hideBar() { var b = document.getElementById('lbBar'); if (b) b.style.display = 'none'; }
   function showBar(msg, label, fn) {
     var b = document.getElementById('lbBar');
@@ -360,12 +377,22 @@
       localSig().then(function (L) { if (L.sig !== lsGet(K_SIG) && L.files.length) push(false); });
     }, 6000);
   }
-  try { new BroadcastChannel('laporan-data').onmessage = schedulePush; } catch (e) {}
+  try {
+    new BroadcastChannel('laporan-data').onmessage = function () {
+      unsynced = true;                                   // ada perubahan yang belum sampai ke server
+      clearTimeout(warnT);
+      warnT = setTimeout(function () {                   // bila 20 detik belum tersinkron → munculkan peringatan
+        if (unsynced && !restoring && !busy) showWarn('Data belum tersimpan ke server.');
+      }, 20000);
+      schedulePush();
+    };
+  } catch (e) {}
 
   function startup() {
     if (busy || restoring) return;
     localSig().then(function (L) {
       var code = getCode(false), has = L.files.length > 0, dirty = L.sig !== lsGet(K_SIG);
+      if (has && dirty) unsynced = true;
       if (!code) {
         setState(has ? 'ok' : 'empty', has ? 'Data ada di perangkat. Sync server belum aktif — isi kode sync.' : 'Mengambil data dari server…');
         if (!has) setTimeout(LB.open, 400);
@@ -390,14 +417,22 @@
     if (busy || restoring || document.hidden || !navigator.onLine) return;
     var code = getCode(false); if (!code) return;
     localSig().then(function (L) {
-      if (L.sig !== lsGet(K_SIG)) { if (L.files.length) schedulePush(); return; }
+      if (L.sig !== lsGet(K_SIG)) { if (L.files.length) { unsynced = true; schedulePush(); } return; }
+      unsynced = false; hideWarn();
       return getRow(code, 'laporan:meta').then(function (meta) {
         if (meta && (meta.rev || 0) > (+lsGet(K_REV) || 0)) showBar('Ada data baru dari perangkat lain', 'Ambil sekarang', function () { pull(true); });
       });
     }).catch(function () {});
   }
   window.addEventListener('online', function () { setTimeout(poll, 500); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) setTimeout(poll, 500); });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) { setTimeout(poll, 500); return; }
+    if (unsynced && !busy && !restoring && navigator.onLine) push(false);   // tab ditinggalkan: kirim sekarang
+  });
+  window.addEventListener('offline', function () { if (unsynced) showWarn('Offline — data belum tersimpan ke server.'); });
+  window.addEventListener('beforeunload', function (e) {                   // tutup/refresh saat belum tersimpan → browser minta konfirmasi
+    if (unsynced && !restoring) { e.preventDefault(); e.returnValue = ''; return ''; }
+  });
   setInterval(poll, 60000);
   startup();
 })();
