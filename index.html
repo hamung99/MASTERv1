@@ -362,6 +362,8 @@
     :root[data-theme="dark"] th { background-color:#1f4e8c; }
 
     /* === Pelacak faktur batal === */
+    td.fk-nol { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
+    :root[data-theme="dark"] td.fk-nol { color:#6b7280; }
     tr.row-batal td, tr.row-pair td.ln { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
     tr.row-batal td { background:#f3f4f6; }
     tr.row-batal td.total-faktur-cell { background:#f3f4f6 !important; }
@@ -634,8 +636,10 @@
               <div id="hbList"></div>
             </div>
             <div class="dropdown-section" id="clearAllSection" style="display:none;">
-              <button class="btn-sm btn-danger" onclick="clearAllData()">
-                🗑️ Hapus Semua Data
+              <h4>Hapus Data</h4>
+              <select class="hb-in" id="delMonthSel"></select>
+              <button class="btn-sm btn-danger" type="button" id="delMonthBtn" onclick="deleteSelectedMonth()">
+                🗑️ Hapus Data Terpilih
               </button>
             </div>
           </div>
@@ -959,6 +963,80 @@
       dropdown.classList.remove('open');
     }
 
+    /* ===== Hapus data per bulan ===== */
+    function populateDelMonths() {
+      const sel = document.getElementById('delMonthSel'); if (!sel) return;
+      const cnt = new Map();
+      allData.forEach(r => { const k = monthKey(r.Tanggal); if (k) cnt.set(k, (cnt.get(k) || 0) + 1); });
+      const prev = sel.value;
+      const keys = [...cnt.keys()].sort();
+      sel.innerHTML = '<option value="">Pilih bulan yang dihapus...</option>' +
+        keys.map(k => { const p = k.split('-'); return '<option value="' + k + '">' + BULAN[parseInt(p[1], 10) - 1] + ' ' + p[0] + ' (' + cnt.get(k) + ' baris)</option>'; }).join('') +
+        '<option value="*">⚠ Semua bulan (hapus semua data)</option>';
+      if (prev && (prev === '*' || cnt.has(prev))) sel.value = prev;
+    }
+    /* Buang baris bulan `delKey` dari sheet pertama, sel lain tidak diubah (tipe data & tanggal tetap asli). */
+    function removeMonthFromBuffer(buf, delKey) {
+      const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      trimSheetRange(sheet);
+      if (!sheet || !sheet['!ref']) return null;
+      const rg = XLSX.utils.decode_range(sheet['!ref']);
+      const enc = XLSX.utils.encode_cell;
+      let dc = -1;
+      for (let c = rg.s.c; c <= rg.e.c; c++) {
+        const h = sheet[enc({ r: rg.s.r, c: c })];
+        if (h && String(h.v).trim().toLowerCase() === 'tanggal') { dc = c; break; }
+      }
+      if (dc < 0) return null;
+      let w = rg.s.r + 1, removed = 0, kept = 0;
+      for (let r = rg.s.r + 1; r <= rg.e.r; r++) {
+        const dcell = sheet[enc({ r: r, c: dc })];
+        if (dcell && monthKey(parseDate(dcell.v)) === delKey) { removed++; continue; }
+        if (dcell && dcell.v !== '' && dcell.v != null) kept++;
+        if (w !== r) {
+          for (let c = rg.s.c; c <= rg.e.c; c++) {
+            const src = sheet[enc({ r: r, c: c })];
+            if (src) sheet[enc({ r: w, c: c })] = src; else delete sheet[enc({ r: w, c: c })];
+          }
+        }
+        w++;
+      }
+      if (!removed) return { buf: buf, removed: 0, kept: kept };
+      for (let r = w; r <= rg.e.r; r++) for (let c = rg.s.c; c <= rg.e.c; c++) delete sheet[enc({ r: r, c: c })];
+      rg.e.r = Math.max(w - 1, rg.s.r);
+      sheet['!ref'] = XLSX.utils.encode_range(rg);
+      if (sheet['!merges']) delete sheet['!merges'];
+      let out = XLSX.write(wb, { type: 'array', bookType: 'xlsx', cellDates: true });
+      if (ArrayBuffer.isView(out)) out = out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength);
+      return { buf: out, removed: removed, kept: kept };
+    }
+    async function deleteSelectedMonth() {
+      const sel = document.getElementById('delMonthSel'), v = sel.value;
+      if (!v) { alert('Pilih dulu bulan yang ingin dihapus.'); return; }
+      if (v === '*') { clearAllData(); return; }
+      const p = v.split('-'), label = BULAN[parseInt(p[1], 10) - 1] + ' ' + p[0];
+      if (!confirm('Hapus semua data penjualan bulan ' + label + '?\n\nData bulan lain tidak ikut terhapus.\n(Pembatalan faktur dan perubahan harga beli tetap tersimpan.)')) return;
+      const btn = document.getElementById('delMonthBtn'); btn.disabled = true;
+      const skipped = []; let total = 0;
+      try {
+        for (const [name, buf] of [...filesMap]) {
+          let res = null;
+          try { res = removeMonthFromBuffer(buf, v); } catch (e) { console.error('Gagal memproses', name, e); }
+          if (!res) { skipped.push(name); continue; }
+          if (!res.removed) continue;
+          total += res.removed;
+          if (res.kept === 0) filesMap.delete(name); else filesMap.set(name, res.buf);
+        }
+        renderFileListMenu();
+        await processAllFiles();
+        await savePJ();
+      } finally { btn.disabled = false; }
+      if (skipped.length) alert('File ini tidak bisa diproses (kolom "Tanggal" tidak ditemukan / file rusak), tidak diubah:\n' + skipped.join('\n'));
+      else if (!total) alert('Tidak ada baris bulan ' + label + ' yang ditemukan di file.');
+      dropdown.classList.remove('open');
+    }
+
     function renderFileListMenu() {
       const el = document.getElementById('fileListMenu');
       const clearSec = document.getElementById('clearAllSection');
@@ -1165,6 +1243,7 @@
         return (a['No. Faktur'] || '').localeCompare(b['No. Faktur'] || '');
       });
 
+      populateDelMonths();
       buildTabData();
       hbPopulate();
       globalSearch.value = '';
@@ -1389,7 +1468,7 @@
         }
         const kat = MINYAK_RE.test(String(r.Produk || '')) ? 'MINYAK' : 'RUPA-RUPA';
         html += '<td class="center">' + (show ? (r.Tanggal || '') : '') + '</td>';
-        html += '<td class="center">' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
+        html += '<td class="center' + (show && invKind[fk] === 'NOL' ? ' fk-nol' : '') + '">' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
         html += '<td class="center">' + (show ? (r.Sales || '') : '') + '</td>';
         html += '<td class="col-customer">' + (show ? (r.Customer || '') : '') + '</td>';
         html += '<td class="col-alamat">' + (show ? (r.Alamat || '') : '') + '</td>';
