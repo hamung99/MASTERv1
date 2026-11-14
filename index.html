@@ -1483,12 +1483,17 @@
           if (!(n.Jumlah < 0) || used.has(ni)) return;
           const cand = pos.get(normProd(n.Produk) + '|' + Math.round(-n.Jumlah * 1e6));
           if (!cand) return;
+          // Pasangan = baris positif TERDEKAT dengan baris minus (utamakan yang di atasnya),
+          // bukan sekadar baris pertama yang kebetulan sama di faktur itu.
+          let best = -1, bestScore = Infinity;
           for (const pi of cand) {
             if (used.has(pi)) continue;
-            const p = lines[pi];
-            if (Math.abs(p.Total + n.Total) >= 1) continue;
-            used.add(pi); used.add(ni); p._pair = true; n._pair = true; break;
+            if (Math.abs(lines[pi].Total + n.Total) >= 1) continue;
+            const d = ni - pi;                       // d>0: positif ada di atas minus
+            const score = d > 0 ? d : (-d) + 100000; // yang di atas diutamakan
+            if (score < bestScore) { bestScore = score; best = pi; }
           }
+          if (best >= 0) { used.add(best); used.add(ni); lines[best]._pair = true; n._pair = true; }
         });
         const isNol = Math.abs(total) < 1;
         const pairs = lines.filter(r => r._pair);
