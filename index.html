@@ -906,8 +906,9 @@
         });
         db.close();
         try { new BroadcastChannel('laporan-data').postMessage('penjualan'); } catch (e) {}
-      } catch (e) { console.error('Gagal menyimpan data penjualan:', e); }
+      } catch (e) { console.error('Gagal menyimpan data penjualan:', e); try { pbToast('Gagal menyimpan Data Penjualan permanen (penyimpanan penuh?)'); } catch (_) {} }
     }
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
     async function loadPJ() {
       try {
         const db = await pjOpen();
@@ -941,9 +942,17 @@
         filesMap.set(file.name, buffer);
       }
       renderFileListMenu();
-      processAllFiles();
+      await processAllFiles();
       savePJ();
       dropdown.classList.remove('open');
+      const dn = Object.keys(dupBySrc);
+      if (dn.length) {
+        const tot = dn.reduce((a, k) => a + dupBySrc[k], 0);
+        alert('Ditemukan ' + tot + ' baris yang sama persis dengan baris di file lain (rentang tanggal file tumpang tindih).\n\n' +
+          'Baris ganda itu hanya dihitung SEKALI, jadi total tidak dobel:\n' +
+          dn.map(k => '• ' + k + ': ' + dupBySrc[k] + ' baris').join('\n') +
+          '\n\nTips: kalau file lama sudah tidak diperlukan, hapus lewat Menu > Data Terupload.');
+      }
     }
 
     function removeFile(name) {
@@ -1136,6 +1145,7 @@
       return u.length + ':' + (h >>> 0).toString(36);
     }
 
+    let dupBySrc = {};
     async function processAllFiles() {
       const my = ++_pjRun;
       allData = [];
@@ -1232,7 +1242,11 @@
           bySrc.forEach(arr => { if (!best || arr.length > best.length) best = arr; });
           best.forEach(r => keep.add(r));
         });
-        if (keep.size !== allData.length) allData = allData.filter(r => keep.has(r));
+        dupBySrc = {};
+        if (keep.size !== allData.length) {
+          allData.forEach(r => { if (!keep.has(r)) { const sn = r._source || '?'; dupBySrc[sn] = (dupBySrc[sn] || 0) + 1; } });
+          allData = allData.filter(r => keep.has(r));
+        }
       })();
 
       applyHargaOverrides();
