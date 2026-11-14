@@ -500,7 +500,9 @@
     #tgPaper .tg-meta span { display:inline-block; min-width:150px; }
     #tgPaper .tg-ttl { font-size:14pt; font-weight:700; margin-bottom:6px; }
     #tgPaper .tg-fill { color:#1b5e20 !important; font-weight:700; font-size:.72rem !important; border:1px solid #a5d6a7 !important; border-radius:4px; padding:0 4px !important; margin-right:2px; background:#f1f8e9 !important; }
-    #tgPaper .tg-fill:hover { background:#c8e6c9 !important; color:#1b5e20 !important; }
+    #tgPaper .tg-fill { color:#4b5563 !important; border-color:#cbd5e1 !important; background:#f3f4f6 !important; }
+    #tgPaper .tg-fill:hover { background:#e5e7eb !important; color:#1f2937 !important; }
+    #tgPaper .tg-fill.on, #tgPaper .tg-fill.on:hover { background:#1976d2 !important; color:#fff !important; border-color:#0d5cb6 !important; }
     #tgPaper .tg-sent { color:#1b5e20; font-weight:700; }
     @media print {
       body.um-printing #tgPaper { min-width:0; zoom:.8; }
@@ -2487,7 +2489,7 @@
             payCell('pc') + payCell('pt') +
             '<td>' + (it.jenis === 'M' ? 'MINYAK' : 'RUPA2') + '</td>' + noteCell +
             '<td class="um-act um-noprint c">' + (sent ? '<span class="tg-sent" title="Sudah dikirim ke Uang Masuk">💰</span>' : '<input type="checkbox" class="tg-pick" data-fk="' + umEsc(it.fk) + '"' + (tgPick.has(it.fk) ? ' checked' : '') + '>') +
-            (sent ? '' : '<button class="tg-fill" data-act="fillc" data-i="' + i + '" title="Bayar penuh CASH: isi sama dengan tagihan">✔C</button><button class="tg-fill" data-act="fillt" data-i="' + i + '" title="Bayar penuh TRANSFER: isi sama dengan tagihan">✔T</button>') +
+            (sent ? '' : (function () { const fs = tgFillState(it); return '<button class="tg-fill' + (fs === 'c' ? ' on' : '') + '" data-act="fillc" data-i="' + i + '" title="Bayar penuh CASH: isi sama dengan tagihan">' + (fs === 'c' ? '✔C' : 'C') + '</button><button class="tg-fill' + (fs === 't' ? ' on' : '') + '" data-act="fillt" data-i="' + i + '" title="Bayar penuh TRANSFER: isi sama dengan tagihan">' + (fs === 't' ? '✔T' : 'T') + '</button>'; })()) +
             '<button data-act="del" data-i="' + i + '" title="Hapus dari Data Tagihan">✕</button></td></tr>';
         });
         h += '<tr><td class="nb" colspan="2"></td><td class="sub c">TOTAL</td><td class="sub" colspan="3"></td><td class="sub r"><span data-k="g' + n + '"></span></td><td class="sub r"><span data-k="c' + n + '"></span></td><td class="sub r"><span data-k="t' + n + '"></span></td><td class="sub"></td><td class="sub"></td><td class="nb um-noprint"></td></tr>';
@@ -2532,6 +2534,21 @@
       tgRender(); await tgSave();
       pbToast(n ? '✔ ' + n + ' faktur diisi Cash = Tagihan' : 'Tidak ada baris kosong');
     });
+    /* Status tombol C/T: 'c' / 't' bila tagihan dibayar penuh lewat Cash / Transfer, selain itu '' */
+    function tgFillState(it) {
+      const tg = umNum(it.tagihan), pc = umNum(it.pc), pt = umNum(it.pt);
+      if (tg > 0 && pc === tg && pt === 0) return 'c';
+      if (tg > 0 && pt === tg && pc === 0) return 't';
+      return '';
+    }
+    function tgSyncFillBtns(tr, it) {
+      const fs = tgFillState(it);
+      [['fillc', 'c', 'C'], ['fillt', 't', 'T']].forEach(x => {
+        const b = tr.querySelector('[data-act="' + x[0] + '"]'); if (!b) return;
+        b.classList.toggle('on', fs === x[1]);
+        b.textContent = (fs === x[1] ? '✔' : '') + x[2];
+      });
+    }
     const tgPaperEl = document.getElementById('tgPaper');
     tgPaperEl.addEventListener('input', e => {
       const t = e.target;
@@ -2543,6 +2560,7 @@
         tgAutoKet(it);
         const kc = t.closest('tr').querySelector('[data-f="ket"]'); if (kc) kc.value = it.ket || '';
         tgRecalc();
+        tgSyncFillBtns(t.closest('tr'), it);
       } else it[f] = t.value;
       clearTimeout(tgPaperEl._t); tgPaperEl._t = setTimeout(tgSave, 400);
     });
