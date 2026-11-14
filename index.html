@@ -875,7 +875,15 @@
 
 
     // ===== Penyimpanan permanen (IndexedDB) =====
-    const PJ_DB = 'pj-v1', PJ_ST = 'pj-data';
+    /* ===== TAHUN APLIKASI =====
+       Untuk aplikasi tahun berikutnya: salin file ini, lalu ubah HANYA baris di bawah (mis. '2027').
+       Tahun '2026' memakai nama penyimpanan lama (data yang sudah ada tetap terbaca);
+       tahun lain otomatis memakai penyimpanan terpisah sehingga data tidak tercampur / saling menimpa. */
+    const APP_YEAR = '2026';
+    const DB_SFX = APP_YEAR === '2026' ? '' : '-' + APP_YEAR;
+    const BC_NAME = 'laporan-data' + DB_SFX;
+    document.title = 'Laporan Penjualan ' + APP_YEAR + ' - Multi Bulan';
+    const PJ_DB = 'pj-v1' + DB_SFX, PJ_ST = 'pj-data';
     function pjOpen() {
       return new Promise((ok, no) => {
         const r = indexedDB.open(PJ_DB, 1);
@@ -905,7 +913,7 @@
           tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
         });
         db.close();
-        try { new BroadcastChannel('laporan-data').postMessage('penjualan'); } catch (e) {}
+        try { new BroadcastChannel(BC_NAME).postMessage('penjualan'); } catch (e) {}
       } catch (e) { console.error('Gagal menyimpan data penjualan:', e); try { pbToast('Gagal menyimpan Data Penjualan permanen (penyimpanan penuh?)'); } catch (_) {} }
     }
     try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
@@ -1067,7 +1075,7 @@
     }
 
     // ===== Cache hasil parse per file =====
-    const PC_DB = 'pj-parse-v1', PC_ST = 'c', PC_VER = 'p1';
+    const PC_DB = 'pj-parse-v1' + DB_SFX, PC_ST = 'c', PC_VER = 'p1';
     let parsedMem = null;
     let _pjRun = 0;
     function pcOpen() {
@@ -1102,7 +1110,7 @@
         });
         db.close();
         /* beri tahu CEK SETELAH hasil parse tersimpan (savePJ memberi sinyal lebih awal, sebelum parse selesai) */
-        try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('penjualan'); bc.close(); } catch (e) {}
+        try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('penjualan'); bc.close(); } catch (e) {}
       } catch (e) { console.warn('Cache parse penjualan gagal disimpan:', e); }
     }
     /* Pangkas rentang sheet (!ref) ke sel yang benar-benar berisi . */
@@ -1532,7 +1540,7 @@
 
 
     /* ===================== PELACAK FAKTUR BATAL ===================== */
-    const PB_DB = 'pjbatal-v1', PB_ST = 'pjbatal-data';
+    const PB_DB = 'pjbatal-v1' + DB_SFX, PB_ST = 'pjbatal-data';
     let batalMap = {};
     let invKind = {};
     let batalSel = new Set();
@@ -1566,7 +1574,7 @@
           tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
         });
       } finally { db.close(); }
-      if (!quiet) { try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('penjualan'); bc.close(); } catch (e) {} }
+      if (!quiet) { try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('penjualan'); bc.close(); } catch (e) {} }
     }
     function pbToast(t) {
       const e = document.getElementById('pbToast'); e.textContent = t; e.classList.add('show');
@@ -1732,7 +1740,7 @@
     window.clearAllData = clearAllData;
 
     /* ===================== MENU RUBAH HARGA BELI ===================== */
-    const HB_DB = 'pjharga-v1', HB_ST = 'pjharga-data';
+    const HB_DB = 'pjharga-v1' + DB_SFX, HB_ST = 'pjharga-data';
     let hargaItems = [];
     function hbOpenDb() {
       return new Promise((ok, no) => {
@@ -1762,7 +1770,7 @@
           tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
         });
       } finally { db.close(); }
-      try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('penjualan'); bc.close(); } catch (e) {}
+      try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('penjualan'); bc.close(); } catch (e) {}
     }
     function applyHargaOverrides() {
       if (!hargaItems.length) return;
@@ -1891,7 +1899,7 @@
 
 
     /* ===================== UANG MASUK HARIAN ===================== */
-    const UM_DB = 'pjuangmasuk-v1', UM_ST = 'pjuangmasuk-data';
+    const UM_DB = 'pjuangmasuk-v1' + DB_SFX, UM_ST = 'pjuangmasuk-data';
     const UM_COLS = ['mc', 'mt', 'rc', 'rt'];
     const UM_NUMF = ['tagihan', 'mc', 'mt', 'rc', 'rt'];
     const HARI = ['MINGGU','SENIN','SELASA','RABU','KAMIS','JUMAT','SABTU'];
@@ -1927,7 +1935,7 @@
             tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
           });
         } finally { db.close(); }
-        try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('um'); bc.close(); } catch (e) {}
+        try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('um'); bc.close(); } catch (e) {}
       } catch (e) { console.error('Gagal menyimpan Uang Masuk:', e); pbToast('Gagal menyimpan Uang Masuk permanen'); }
     }
     function umAfterChange() {
@@ -2313,7 +2321,7 @@
 
     /* ===================== DATA TAGIHAN (DTH) ===================== */
     /* Alur: Data Penjualan -> Data Tagihan -> Uang Masuk */
-    const TG_DB = 'pjtagihan-v1', TG_ST = 'pjtagihan-data';
+    const TG_DB = 'pjtagihan-v1' + DB_SFX, TG_ST = 'pjtagihan-data';
     function tgOpen() {
       return new Promise((ok, no) => {
         const q = indexedDB.open(TG_DB, 1);
@@ -2346,7 +2354,7 @@
             tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
           });
         } finally { db.close(); }
-        try { const bc = new BroadcastChannel('laporan-data'); bc.postMessage('tg'); bc.close(); } catch (e) {}
+        try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('tg'); bc.close(); } catch (e) {}
       } catch (e) { console.error('Gagal menyimpan Data Tagihan:', e); pbToast('Gagal menyimpan Data Tagihan permanen'); }
     }
     function tgAfterChange() {
