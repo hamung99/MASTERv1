@@ -1136,6 +1136,27 @@
       for (const k of Object.keys(cache)) if (!seenNames.has(k)) { delete cache[k]; cacheDirty = true; }
       if (cacheDirty) pcSave();
 
+      // Hapus baris dobel akibat beberapa file Excel yang rentang tanggalnya saling tumpang tindih.
+      // Baris identik dari file BERBEDA dianggap data yang sama; baris identik di file yang SAMA tetap dipertahankan.
+      (function dedupeAcrossFiles() {
+        const keyOf = r => [r.Tanggal, r['No. Faktur'], r.Produk, r.Jumlah, r.Satuan, r['Harga Jual'], r.Discount, r.Total, r['Harga Beli'], r.Customer].join('\u0001');
+        const groups = new Map();   // key -> Map(source -> [rows])
+        allData.forEach(r => {
+          const k = keyOf(r);
+          if (!groups.has(k)) groups.set(k, new Map());
+          const bySrc = groups.get(k), src = r._source || '';
+          if (!bySrc.has(src)) bySrc.set(src, []);
+          bySrc.get(src).push(r);
+        });
+        const keep = new Set();
+        groups.forEach(bySrc => {
+          let best = null;
+          bySrc.forEach(arr => { if (!best || arr.length > best.length) best = arr; });
+          best.forEach(r => keep.add(r));
+        });
+        if (keep.size !== allData.length) allData = allData.filter(r => keep.has(r));
+      })();
+
       applyHargaOverrides();
       allData.sort((a, b) => {
         const da = sortKey(a.Tanggal);
