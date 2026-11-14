@@ -383,6 +383,19 @@
     .pb-info { color:var(--muted); font-size:.76rem; width:100%; line-height:1.5; }
     #table-batal td { white-space:nowrap; }
     #table-batal td.wrap { white-space:normal; min-width:260px; }
+    .tt-table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    .tt-table th, .tt-table td { border:1px solid var(--border,#d0d7de); padding:5px 7px; white-space:nowrap; }
+    .tt-table th { background:#0b3d91; color:#fff; position:sticky; top:0; z-index:2; }
+    .tt-table td.r { text-align:right; font-variant-numeric:tabular-nums; }
+    .tt-table td.c { text-align:center; }
+    .tt-table tr.tt-lunas td { color:#6b7280; }
+    .tt-table input.tt-in { width:100%; min-width:120px; border:1px solid transparent; background:transparent; color:inherit; font:inherit; padding:2px 4px; }
+    .tt-table input.tt-in:focus { border-color:#f59e0b; background:rgba(245,158,11,.12); outline:none; }
+    .tt-table tfoot td { font-weight:700; background:rgba(245,158,11,.15); }
+    .tt-badge { display:inline-block; padding:1px 8px; border-radius:10px; font-size:.72rem; font-weight:700; }
+    .tt-badge.b { background:#fde68a; color:#92400e; }
+    .tt-badge.l { background:#bbf7d0; color:#166534; }
+    #ttSearch { min-width:220px; }
     #pbToast { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(.92); width:max-content; max-width:min(88vw,460px); text-align:center; background:#1e293b; color:#fff; padding:18px 26px; border-radius:14px; border:2px solid #f59e0b; box-shadow:0 12px 40px rgba(0,0,0,.45); font-size:1.05rem; font-weight:600; line-height:1.45; opacity:0; transition:opacity .2s, transform .2s; pointer-events:none; z-index:9999; }
     #pbToast.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
     :root[data-theme="dark"] tr.row-batal td, :root[data-theme="dark"] tr.row-pair td.ln { color:#6b7280; }
@@ -585,6 +598,7 @@
         <button type="button" class="um-btn" id="tgTabBtn">📋 Tagihan Tempo <span class="tab-n" id="tgN"></span></button>
         <button type="button" class="um-btn" id="tgTabBtnC">📋 Tagihan Cash <span class="tab-n" id="tgNC"></span></button>
         <button type="button" class="um-btn" id="umTabBtn">💰 Uang Masuk <span class="tab-n" id="umN"></span></button>
+        <button type="button" class="um-btn" id="ttTabBtn">📌 Cek Titip <span class="tab-n" id="ttN"></span></button>
         <button class="tab active" data-tab="lengkap">Data Penjualan</button>
         <button class="tab" data-tab="batal">⚠ Pelacak Batal <span class="tab-n" id="batalN"></span></button>
       </div>
@@ -695,6 +709,23 @@
         </div>
         <div class="table-wrapper"><div id="table-batal"></div></div>
         <div class="pagination" id="page-batal"></div>
+      </div>
+
+      <div class="tab-content" id="tab-titip">
+        <div class="pb-bar um-tools">
+          <select id="ttView" title="Tampilkan">
+            <option value="B">Belum lunas</option>
+            <option value="L">Sudah lunas</option>
+            <option value="ALL">Semua</option>
+          </select>
+          <input type="text" id="ttSearch" class="search-box" placeholder="Cari toko / faktur / sales..." autocomplete="off">
+          <button type="button" class="pb-btn" id="ttLunas" title="Tandai faktur yang dicentang sebagai sudah dilunasi">✔ Tandai Lunas</button>
+          <button type="button" class="pb-btn" id="ttBelum" title="Kembalikan faktur yang dicentang menjadi belum lunas">↺ Kembalikan</button>
+          <button type="button" class="pb-btn" id="ttExcel">📥 Simpan Excel</button>
+          <button type="button" class="pb-btn danger" id="ttDel">Hapus terpilih</button>
+          <div class="pb-info" id="ttInfo"></div>
+        </div>
+        <div class="table-wrapper"><div id="ttTable"></div></div>
       </div>
 
       <div class="tab-content" id="tab-tagihan">
@@ -1365,6 +1396,7 @@
         document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById('umTabBtn').classList.remove('active');
+        document.getElementById('ttTabBtn').classList.remove('active');
         document.getElementById('tgTabBtn').classList.remove('active');
         document.getElementById('tgTabBtnC').classList.remove('active');
         btn.classList.add('active');
@@ -1884,7 +1916,7 @@
         const act = bs.find(b => b.classList.contains('active'));
         sel.classList.toggle('is-on', !!act);
         if (act) sel.value = act.dataset.tab;
-        else if (document.getElementById('umTabBtn').classList.contains('active') || document.getElementById('tgTabBtn').classList.contains('active') || document.getElementById('tgTabBtnC').classList.contains('active')) {
+        else if (document.getElementById('umTabBtn').classList.contains('active') || document.getElementById('ttTabBtn').classList.contains('active') || document.getElementById('tgTabBtn').classList.contains('active') || document.getElementById('tgTabBtnC').classList.contains('active')) {
           sel.insertAdjacentHTML('beforeend', '<option value="__um" hidden disabled>Pilih tampilan…</option>');
           sel.value = '__um';
         }
@@ -2010,6 +2042,7 @@
       currentTab = 'uangmasuk';
       document.getElementById('tab-uangmasuk').classList.add('active');
       umTabBtn.classList.add('active');
+      document.getElementById('ttTabBtn').classList.remove('active');
       document.getElementById('tgTabBtn').classList.remove('active');
       document.getElementById('tgTabBtnC').classList.remove('active');
       globalSearch.value = '';
@@ -2146,8 +2179,17 @@
       const f = t.dataset.f;
       if (UM_NUMF.includes(f)) it[f] = parseInt(t.value.replace(/\D/g, ''), 10) || 0;
       else it[f] = t.value;
-      if (UM_NUMF.includes(f)) umRecalc();
+      if (UM_NUMF.includes(f)) {
+        umAutoKet(it);   /* bayar kurang dari tagihan -> keterangan otomatis TITIP */
+        const kc = t.closest('tr').querySelector('[data-f="ket"]'); if (kc) kc.value = it.ket || '';
+        umRecalc();
+      }
+      ttSyncUmItem(it);
       clearTimeout(umPaperEl._t); umPaperEl._t = setTimeout(umSave, 400);
+    });
+    umPaperEl.addEventListener('change', e => {   /* selesai mengetik: kalau keterangan bukan TITIP lagi, hapus dari Cek Titip */
+      const t = e.target;
+      if (t.classList.contains('um-in')) { const it = umItems[+t.dataset.i]; if (it) ttSyncUmItem(it, true); }
     });
     umPaperEl.addEventListener('focusout', e => {
       const t = e.target;
@@ -2423,6 +2465,7 @@
       }));
       list.forEach(x => tgPick.delete(x.fk)); tgUpdatePickN();
       umAfterChange(); tgAfterChange();
+      umItems.slice(-list.length).forEach(ttSyncUmItem);
       await umSave();
       tgRender(); renderTab('lengkap');
       pbToast('💰 ' + list.length + ' faktur dikirim ke Uang Masuk');
@@ -2435,6 +2478,7 @@
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.getElementById('umTabBtn').classList.remove('active');
+      document.getElementById('ttTabBtn').classList.remove('active');
       tgKind = kind;
       currentTab = 'tagihan';
       document.getElementById('tab-tagihan').classList.add('active');
@@ -2705,7 +2749,156 @@
       await tgPut();
     }
 
-    loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(loadPJ);
+    /* ===================== CEK TITIP ===================== */
+    /* Faktur yang Keterangannya TITIP (di Uang Masuk) otomatis disimpan di sini, tetap ada walau Uang Masuk dikosongkan. */
+    const TT_DB = 'pjtitip-v1' + DB_SFX, TT_ST = 'pjtitip-data';
+    let ttItems = [];
+    const ttSel = new Set();
+    function ttOpen() {
+      return new Promise((ok, no) => {
+        const q = indexedDB.open(TT_DB, 1);
+        q.onupgradeneeded = () => { if (!q.result.objectStoreNames.contains(TT_ST)) q.result.createObjectStore(TT_ST); };
+        q.onsuccess = () => { const db = q.result; db.onversionchange = () => db.close(); ok(db); };
+        q.onerror = () => no(q.error);
+      });
+    }
+    async function ttLoad() {
+      try {
+        const db = await ttOpen();
+        const v = await new Promise((ok, no) => {
+          const r = db.transaction(TT_ST, 'readonly').objectStore(TT_ST).get('latest');
+          r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+        });
+        db.close();
+        ttItems = (v && Array.isArray(v.items)) ? v.items : [];
+      } catch (e) { console.error('Gagal memuat Cek Titip:', e); }
+      umItems.forEach(it => ttSyncUmItem(it));   /* faktur TITIP yang sudah ada di Uang Masuk ikut tercatat */
+      ttAfterChange();
+    }
+    async function ttSave() {
+      try {
+        const db = await ttOpen();
+        try {
+          await new Promise((ok, no) => {
+            const tx = db.transaction(TT_ST, 'readwrite');
+            tx.objectStore(TT_ST).put({ items: ttItems }, 'latest');
+            tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
+          });
+        } finally { db.close(); }
+        try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('tt'); bc.close(); } catch (e) {}
+      } catch (e) { console.error('Gagal menyimpan Cek Titip:', e); pbToast('Gagal menyimpan Cek Titip permanen'); }
+    }
+    let _ttT; function ttSaveSoon() { clearTimeout(_ttT); _ttT = setTimeout(ttSave, 400); }
+    function ttAfterChange() {
+      const n = ttItems.filter(x => x.status !== 'L').length;
+      const el = document.getElementById('ttN'); if (el) el.textContent = n || '';
+    }
+    const ttIsTitip = k => /TITIP/i.test(String(k || ''));
+    const ttSisa = x => Math.max(0, umNum(x.tagihan) - umNum(x.bayar));
+    function ttIsoToDmy(iso) { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? m[3] + '/' + m[2] + '/' + m[1] : (iso || ''); }
+
+    /* Bayar kurang dari tagihan -> TITIP; bayar penuh -> LUNAS (catatan manual tidak ditimpa) */
+    function umAutoKet(it) {
+      const p = umTot(it), t = umNum(it.tagihan), k = String(it.ket || '').trim().toUpperCase();
+      if (p > 0 && p < t) { if (!k || k === 'LUNAS') it.ket = 'TITIP'; }
+      else if (p >= t && p > 0) { if (!k || k === 'TITIP') it.ket = 'LUNAS'; }
+      else if (p === 0 && k === 'LUNAS') it.ket = '';
+    }
+    /* Dipanggil tiap item Uang Masuk berubah: ket TITIP -> simpan/perbarui di Cek Titip */
+    function ttSyncUmItem(it, allowRemove) {
+      if (!it || !it.fk) return;
+      const idx = ttItems.findIndex(x => x.fk === it.fk);
+      if (ttIsTitip(it.ket)) {
+        const bayar = umTot(it), tag = umNum(it.tagihan);
+        if (idx < 0) {
+          ttItems.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), fk: it.fk, sales: it.sales || '', noFaktur: it.noFaktur || '', toko: it.toko || '', alamat: it.alamat || '',
+            tglFaktur: it.tgl || '', tglTitip: umMeta.date || umTodayISO(), tagihan: tag, bayar: bayar, ket: it.ket, status: 'B', tglLunas: '', catatan: '', auto: true });
+        } else if (ttItems[idx].status !== 'L') {
+          Object.assign(ttItems[idx], { tagihan: tag, bayar: bayar, ket: it.ket });
+        } else return;
+      } else if (allowRemove && idx >= 0 && ttItems[idx].status !== 'L' && ttItems[idx].auto) {
+        ttItems.splice(idx, 1);   /* keterangan diubah bukan TITIP lagi */
+      } else return;
+      ttAfterChange(); ttSaveSoon();
+      if (currentTab === 'titip') ttRender();
+    }
+
+    function ttRows() {
+      const view = document.getElementById('ttView').value, q = document.getElementById('ttSearch').value.trim().toLowerCase();
+      return ttItems.filter(x => (view === 'ALL' || (view === 'L') === (x.status === 'L')) &&
+        (!q || (x.toko + ' ' + x.noFaktur + ' ' + x.sales + ' ' + x.alamat + ' ' + x.catatan).toLowerCase().includes(q)))
+        .sort((a, b) => String(b.tglTitip).localeCompare(String(a.tglTitip)) || String(a.sales).localeCompare(String(b.sales)) || String(a.toko).localeCompare(String(b.toko)));
+    }
+    function ttRender() {
+      const rows = ttRows(), fm = n => Number(n || 0).toLocaleString('id-ID');
+      let h = '<table class="tt-table"><thead><tr><th><input type="checkbox" id="ttAll" title="Pilih semua yang tampil"></th><th>NO</th><th>TGL TITIP</th><th>SALES</th><th>NO FAKTUR</th><th>NAMA TOKO</th><th>ALAMAT</th><th>TGL FAKTUR</th><th>TAGIHAN</th><th>DIBAYAR</th><th>SISA</th><th>STATUS</th><th>TGL LUNAS</th><th>CATATAN</th></tr></thead><tbody>';
+      if (!rows.length) h += '<tr><td colspan="14" class="c" style="padding:14px;color:#6b7280;font-style:italic">Belum ada data titip. Faktur dengan keterangan TITIP di tab Uang Masuk akan otomatis masuk ke sini.</td></tr>';
+      let tSisa = 0;
+      rows.forEach((x, i) => {
+        const l = x.status === 'L', sisa = ttSisa(x); if (!l) tSisa += sisa;
+        h += '<tr class="' + (l ? 'tt-lunas' : '') + '"><td class="c"><input type="checkbox" class="tt-pick" data-id="' + x.id + '"' + (ttSel.has(x.id) ? ' checked' : '') + '></td>' +
+          '<td class="c">' + (i + 1) + '</td><td class="c">' + ttIsoToDmy(x.tglTitip) + '</td><td>' + umEsc(x.sales) + '</td><td class="c">' + umEsc(x.noFaktur) + '</td>' +
+          '<td>' + umEsc(x.toko) + '</td><td>' + umEsc(x.alamat) + '</td><td class="c">' + umEsc(x.tglFaktur) + '</td>' +
+          '<td class="r">' + fm(x.tagihan) + '</td><td class="r">' + fm(x.bayar) + '</td><td class="r"><b>' + fm(sisa) + '</b></td>' +
+          '<td class="c"><span class="tt-badge ' + (l ? 'l' : 'b') + '">' + (l ? 'LUNAS' : 'TITIP') + '</span></td>' +
+          '<td class="c">' + (l ? '<input type="date" class="tt-in" data-id="' + x.id + '" data-f="tglLunas" value="' + umEsc(x.tglLunas) + '">' : '') + '</td>' +
+          '<td><input class="tt-in" data-id="' + x.id + '" data-f="catatan" placeholder="catatan..." value="' + umEsc(x.catatan) + '"></td></tr>';
+      });
+      h += '</tbody><tfoot><tr><td colspan="10" class="r">TOTAL SISA BELUM LUNAS (yang tampil)</td><td class="r">' + fm(tSisa) + '</td><td colspan="3"></td></tr></tfoot></table>';
+      document.getElementById('ttTable').innerHTML = h;
+      const nB = ttItems.filter(x => x.status !== 'L').length;
+      document.getElementById('ttInfo').textContent = rows.length + ' faktur tampil · ' + nB + ' belum lunas total';
+    }
+    function ttShow() {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      ['umTabBtn', 'tgTabBtn', 'tgTabBtnC'].forEach(id => document.getElementById(id).classList.remove('active'));
+      currentTab = 'titip';
+      document.getElementById('tab-titip').classList.add('active');
+      document.getElementById('ttTabBtn').classList.add('active');
+      globalSearch.value = '';
+      ttRender();
+    }
+    document.getElementById('ttTabBtn').addEventListener('click', ttShow);
+    document.getElementById('ttView').addEventListener('change', () => { ttSel.clear(); ttRender(); });
+    document.getElementById('ttSearch').addEventListener('input', () => { clearTimeout(ttRender._t); ttRender._t = setTimeout(ttRender, 200); });
+    const ttTableEl = document.getElementById('ttTable');
+    ttTableEl.addEventListener('change', e => {
+      const t = e.target;
+      if (t.id === 'ttAll') { ttRows().forEach(x => { if (t.checked) ttSel.add(x.id); else ttSel.delete(x.id); }); ttRender(); return; }
+      if (t.classList.contains('tt-pick')) { if (t.checked) ttSel.add(t.dataset.id); else ttSel.delete(t.dataset.id); return; }
+      if (t.classList.contains('tt-in') && t.dataset.f === 'tglLunas') { const x = ttItems.find(y => y.id === t.dataset.id); if (x) { x.tglLunas = t.value; ttSaveSoon(); } }
+    });
+    ttTableEl.addEventListener('input', e => {
+      const t = e.target;
+      if (t.classList.contains('tt-in') && t.dataset.f === 'catatan') { const x = ttItems.find(y => y.id === t.dataset.id); if (x) { x.catatan = t.value; ttSaveSoon(); } }
+    });
+    function ttSelected() { return ttItems.filter(x => ttSel.has(x.id)); }
+    document.getElementById('ttLunas').addEventListener('click', async () => {
+      const l = ttSelected().filter(x => x.status !== 'L'); if (!l.length) { pbToast('Centang faktur titip yang belum lunas dulu'); return; }
+      l.forEach(x => { x.status = 'L'; x.tglLunas = umTodayISO(); }); ttSel.clear();
+      ttAfterChange(); ttRender(); await ttSave(); pbToast('✔ ' + l.length + ' faktur ditandai LUNAS');
+    });
+    document.getElementById('ttBelum').addEventListener('click', async () => {
+      const l = ttSelected().filter(x => x.status === 'L'); if (!l.length) { pbToast('Centang faktur yang sudah lunas dulu'); return; }
+      l.forEach(x => { x.status = 'B'; x.tglLunas = ''; }); ttSel.clear();
+      ttAfterChange(); ttRender(); await ttSave(); pbToast('↺ ' + l.length + ' faktur dikembalikan ke belum lunas');
+    });
+    document.getElementById('ttDel').addEventListener('click', async () => {
+      const l = ttSelected(); if (!l.length) { pbToast('Centang faktur yang mau dihapus dulu'); return; }
+      if (!confirm('Hapus ' + l.length + ' faktur dari Cek Titip?\n\nIni tidak menghapus data di tab lain.')) return;
+      ttItems = ttItems.filter(x => !ttSel.has(x.id)); ttSel.clear();
+      ttAfterChange(); ttRender(); await ttSave();
+    });
+    document.getElementById('ttExcel').addEventListener('click', () => {
+      const rows = ttRows(); if (!rows.length) { pbToast('Tidak ada data untuk disimpan'); return; }
+      const aoa = [['TGL TITIP', 'SALES', 'NO FAKTUR', 'NAMA TOKO', 'ALAMAT', 'TGL FAKTUR', 'TAGIHAN', 'DIBAYAR', 'SISA', 'STATUS', 'TGL LUNAS', 'CATATAN']]
+        .concat(rows.map(x => [ttIsoToDmy(x.tglTitip), x.sales, x.noFaktur, x.toko, x.alamat, x.tglFaktur, umNum(x.tagihan), umNum(x.bayar), ttSisa(x), x.status === 'L' ? 'LUNAS' : 'TITIP', ttIsoToDmy(x.tglLunas), x.catatan]));
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Cek Titip');
+      XLSX.writeFile(wb, 'Cek Titip ' + umTodayISO() + '.xlsx');
+    });
+
+    loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(ttLoad).then(loadPJ);
   </script>
 <script src="backup.js"></script>
 <script>
