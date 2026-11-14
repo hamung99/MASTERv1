@@ -1372,7 +1372,7 @@
         html += '<td class="center">' + (show ? (r.Sales || '') : '') + '</td>';
         html += '<td class="col-customer">' + (show ? (r.Customer || '') : '') + '</td>';
         html += '<td class="col-alamat">' + (show ? (r.Alamat || '') : '') + '</td>';
-        html += '<td class="center ln">' + kat + '</td>';
+        html += '<td class="center' + (show ? ' ln' : '') + '">' + (show ? kat : '') + '</td>';
         html += '<td class="num' + (show ? ' total-faktur-cell' : '') + '">' + totTxt + '</td>';
         html += '<td class="center">' + (show ? (r.Pembayaran || '') : '') + '</td>';
         html += '<td class="col-produk ln">' + (r.Produk || '') + '</td>';
