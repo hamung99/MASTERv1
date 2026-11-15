@@ -19,7 +19,9 @@
     { db: 'pjbatal-v1', st: 'pjbatal-data' },
     { db: 'pjharga-v1', st: 'pjharga-data' },
     { db: 'pjuangmasuk-v1', st: 'pjuangmasuk-data' },
-    { db: 'pjtagihan-v1', st: 'pjtagihan-data' }];
+    { db: 'pjtagihan-v1', st: 'pjtagihan-data' },
+    { db: 'pjtitip-v1', st: 'pjtitip-data' }];   // Cek Titip
+  var D_ARSIP = { db: 'pjarsip-v1', st: 'arsip' };   // Arsip riwayat Tagihan & Uang Masuk (banyak kunci)
   var D_PARSE = { db: 'pj-parse-v1', st: 'c' };
 
   var busy = false, restoring = false, pushT = null, unsynced = false, warnT = null;
@@ -76,6 +78,29 @@
         tx.onerror = tx.onabort = function () { db.close(); no(tx.error); };
       });
     });
+  }
+  function idbGetAll(def) {   // semua kunci -> objek {kunci: nilai}
+    return open(def).then(function (db) {
+      return new Promise(function (ok, no) {
+        var o = {}, c = db.transaction(def.st, 'readonly').objectStore(def.st).openCursor();
+        c.onsuccess = function () { var cur = c.result; if (cur) { o[cur.key] = cur.value; cur.continue(); } else { db.close(); ok(o); } };
+        c.onerror = function () { db.close(); no(c.error); };
+      });
+    });
+  }
+  function idbPutAll(def, obj) {   // ganti seluruh isi store dengan objek {kunci: nilai}
+    return open(def).then(function (db) {
+      return new Promise(function (ok, no) {
+        var tx = db.transaction(def.st, 'readwrite'), st = tx.objectStore(def.st);
+        st.clear(); Object.keys(obj || {}).forEach(function (k) { st.put(obj[k], k); });
+        tx.oncomplete = function () { db.close(); ok(); };
+        tx.onerror = tx.onabort = function () { db.close(); no(tx.error); };
+      });
+    });
+  }
+  function putOthers(o) {   // tulis semua data selain file penjualan (dipakai saat pulihkan)
+    return Promise.all(OTHERS.map(function (d) { return o[d.db] !== undefined ? idbPut(d, dec(o[d.db])) : Promise.resolve(); })
+      .concat([o[D_ARSIP.db] !== undefined ? idbPutAll(D_ARSIP, dec(o[D_ARSIP.db])) : Promise.resolve()]));
   }
   function idbClear(def) {
     return open(def).then(function (db) {
@@ -136,7 +161,8 @@
   }
   function readOtherJson() {
     var o = {};
-    return Promise.all(OTHERS.map(function (d) { return idbGet(d).then(function (v) { if (v !== undefined) o[d.db] = enc(v); }); }))
+    return Promise.all(OTHERS.map(function (d) { return idbGet(d).then(function (v) { if (v !== undefined) o[d.db] = enc(v); }); })
+      .concat([idbGetAll(D_ARSIP).then(function (m) { if (Object.keys(m).length) o[D_ARSIP.db] = enc(m); }).catch(function () {})]))
       .then(function () { return JSON.stringify(o); });
   }
   function localSig() {
@@ -246,7 +272,7 @@
             restoring = true;
             var obj = json ? JSON.parse(json) : {};
             return idbPut(D_PJ, { files: out })
-              .then(function () { return Promise.all(OTHERS.map(function (d) { return obj[d.db] !== undefined ? idbPut(d, dec(obj[d.db])) : Promise.resolve(); })); })
+              .then(function () { return putOthers(obj); })
               .then(function () { return idbClear(D_PARSE); })
               .then(function () { return localSig(); })
               .then(function (L) { lsSet(K_REV, String(meta.rev || 0)); lsSet(K_SIG, L.sig); unsynced = false; hideWarn(); setState('busy', 'Data diterima, memuat ulang…'); setTimeout(function () { location.reload(); }, 300); return true; });
@@ -286,7 +312,7 @@
       if (!files || !other) { setState('error', 'File bukan backup yang valid'); return; }
       restoring = true;
       idbPut(D_PJ, { files: files.filter(function (f) { return typeof f.b64 === 'string'; }).map(function (f) { return { name: f.name, buf: b642ab(f.b64) }; }) })
-        .then(function () { return Promise.all(OTHERS.map(function (d) { return other[d.db] !== undefined ? idbPut(d, dec(other[d.db])) : Promise.resolve(); })); })
+        .then(function () { return putOthers(other); })
         .then(function () { return idbClear(D_PARSE); })
         .then(function () { setState('busy', 'Selesai, memuat ulang…'); setTimeout(function () { location.reload(); }, 300); })
         .catch(function (e) { restoring = false; setState('error', errMsg(e)); });

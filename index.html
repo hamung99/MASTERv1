@@ -2938,6 +2938,7 @@
             tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
           });
         } finally { db.close(); }
+        try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('arsip'); bc.close(); } catch (e) {}
       } catch (e) { console.error('Gagal menyimpan arsip:', e); }
     }
     async function arsipSaveTg(kind) {
