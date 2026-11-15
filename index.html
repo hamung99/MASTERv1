@@ -610,8 +610,8 @@
       <div class="right-controls">
         <select class="month-sel" id="monthFilter" title="Filter bulan"><option value="">Semua Bulan</option></select>
         <div class="date-rng" id="dateRng">
-          <span>Dari</span><input type="date" id="dateFrom" title="Dari tanggal">
-          <span>s/d</span><input type="date" id="dateTo" title="Sampai tanggal">
+          <input type="date" id="dateFrom" title="Filter tanggal">
+          <input type="date" id="dateTo" style="display:none" tabindex="-1" aria-hidden="true">
           <button type="button" class="dr-x" id="dateClear" title="Hapus filter tanggal">✕</button>
         </div>
         <input type="text" class="search-box" id="globalSearch" placeholder="Cari produk / customer / faktur...">
@@ -822,7 +822,7 @@
       return true;
     }
     function onDateChange(changed) {
-      dateFrom = dateFromEl.value; dateTo = dateToEl.value;
+      dateFrom = dateFromEl.value; dateTo = dateFrom; dateToEl.value = dateFrom;   /* filter tanggal tunggal */
       if (dateFrom && dateTo && dateFrom > dateTo) {      // otomatis tukar jika terbalik
         if (changed === 'from') { dateTo = dateFrom; dateToEl.value = dateTo; }
         else { dateFrom = dateTo; dateFromEl.value = dateFrom; }
@@ -2639,8 +2639,9 @@
       const i = +b.dataset.i, it = tgItems[i]; if (!it) return;
       if (b.dataset.act === 'fillc' || b.dataset.act === 'fillt') {
         const tg = umNum(it.tagihan);
-        it.pc = b.dataset.act === 'fillc' ? tg : 0; it.pt = b.dataset.act === 'fillt' ? tg : 0;
-        it.ket = ''; tgAutoKet(it);
+        const wasOn = tgFillState(it) === (b.dataset.act === 'fillc' ? 'c' : 't');
+        if (wasOn) { it.pc = 0; it.pt = 0; if (/^(LUNAS|TITIP)$/i.test(String(it.ket || '').trim())) it.ket = ''; }   /* klik lagi = batalkan centang */
+        else { it.pc = b.dataset.act === 'fillc' ? tg : 0; it.pt = b.dataset.act === 'fillt' ? tg : 0; it.ket = ''; tgAutoKet(it); }
         tgRender(); await tgSave(); return;
       }
       if (!confirm('Hapus faktur ' + it.noFaktur + ' dari Data Tagihan?')) return;
