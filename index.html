@@ -511,7 +511,7 @@
     }
 
     /* === Data Tagihan (DTH) === */
-    #tgPaper { min-width:1100px; }
+    #tgPaper { min-width:1000px; }
     #tgPaper .tg-sheet { margin-bottom:34px; }
     #tgPaper .tg-meta { font-weight:700; font-size:11pt; line-height:1.5; margin-bottom:4px; }
     #tgPaper .tg-meta span { display:inline-block; min-width:150px; }
@@ -2508,7 +2508,7 @@
       groups.forEach(g => g.idx.sort((a, b) => ((tgItems[a].jenis === 'M' ? 0 : 1) - (tgItems[b].jenis === 'M' ? 0 : 1)) || (a - b)));
       return groups;
     }
-    const TG_COLGROUP = '<colgroup><col style="width:44px"><col style="width:150px"><col style="width:200px"><col style="width:200px"><col style="width:95px"><col style="width:95px"><col style="width:120px"><col style="width:110px"><col style="width:110px"><col style="width:120px"><col style="width:150px"><col class="um-noprint" style="width:120px"></colgroup>';
+    const TG_COLGROUP = '<colgroup><col style="width:30px"><col style="width:128px"><col style="width:200px"><col style="width:200px"><col style="width:95px"><col style="width:95px"><col style="width:120px"><col style="width:110px"><col style="width:110px"><col style="width:120px"><col style="width:150px"><col class="um-noprint" style="width:120px"></colgroup>';
     function tgRender() {
       const groups = tgGroups();
       const d = tgMeta.date ? new Date(tgMeta.date + 'T00:00:00') : new Date();
