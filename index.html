@@ -472,6 +472,10 @@
     .um-send:hover:not(:disabled) { background:#c8e6c9 !important; }
     :root[data-theme="dark"] .um-send { background:#16301c !important; color:#a5d6a7 !important; border-color:#2e5e36 !important; }
     :root[data-theme="dark"] .um-send:hover:not(:disabled) { background:#1d3d25 !important; }
+    /* Tombol Kirim ke Tagihan berkedip biru saat ada faktur yang dicentang */
+    @keyframes umBlink { 0%,100% { --blinkBg:#1976d2; --blinkFg:#fff; --blinkBd:#0d47a1; } 50% { --blinkBg:#e8f5e9; --blinkFg:#1b5e20; --blinkBd:#a5d6a7; } }
+    .um-send.um-blink { background:var(--blinkBg,#1976d2) !important; color:var(--blinkFg,#fff) !important; border-color:var(--blinkBd,#0d47a1) !important; animation:umBlink 1s ease-in-out infinite; }
+    :root[data-theme="dark"] .um-send.um-blink { background:var(--blinkBg,#1976d2) !important; color:var(--blinkFg,#fff) !important; border-color:var(--blinkBd,#0d47a1) !important; }
 
     /* === Halaman Uang Masuk === */
     .um-tools label { display:flex; align-items:center; gap:.4rem; font-size:.8rem; }
@@ -2000,6 +2004,8 @@
       umPick.forEach(fk => { if (isTempoFk(fk)) t++; else c++; });
       document.getElementById('umPickNT').textContent = t;
       document.getElementById('umPickNC').textContent = c;
+      document.getElementById('umSendT').classList.toggle('um-blink', t > 0);
+      document.getElementById('umSendC').classList.toggle('um-blink', c > 0);
     }
     document.getElementById('table-lengkap').addEventListener('change', e => {
       const t = e.target;
