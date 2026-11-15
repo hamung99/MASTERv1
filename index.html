@@ -1219,6 +1219,7 @@
       salesSel.style.display = 'block';
 
       // Reset filter Data Lengkap supaya data baru langsung tampil semua
+      salesFilter = '';
       const pf = document.getElementById('payFilter'); if (pf) pf.value = '';
       const rf = document.getElementById('prodFilter'); if (rf) rf.value = '';
 
@@ -1372,7 +1373,8 @@
 
     /* ===== Aturan klasifikasi ===== */
     const MINYAK_RE = /FITRI/i;
-    const isCash  = r => /^cash$/i.test(String(r.Pembayaran || '').trim());
+    /* Cash = semua yang bukan Tempo (termasuk Pembayaran kosong) — sama dengan hitungan tombol "Kirim ke Tagihan" dan tgSend */
+    const isCash  = r => !/^tempo$/i.test(String(r.Pembayaran || '').trim());
     const isTempo = r => /^tempo$/i.test(String(r.Pembayaran || '').trim());
 
     function buildTabData() {
@@ -1666,6 +1668,9 @@
         const nilai = src.reduce((s, r) => s + Math.abs(r.Total), 0);
         const detail = (src.length ? src : lines).map(r => r.Produk + ' ×' + formatNum(Math.abs(r.Jumlah)) + ' (' + formatNum(Math.abs(r.Total)) + ')').join('; ');
         invKind[k] = isNol ? 'NOL' : 'PARSIAL';
+        /* Faktur yang sudah ditandai batal tetapi sekarang PARSIAL: cukup 1 baris (baris arsip di bawah, yang punya
+           checkbox untuk mengembalikan). Tanpa ini faktur yang sama muncul dua kali. */
+        if (!isNol && batalMap[k]) return;
         list.push({
           kind: invKind[k], fk: k, Tanggal: f.Tanggal, 'No. Faktur': f['No. Faktur'], Customer: f.Customer, Sales: f.Sales,
           Alamat: f.Alamat, 'Kd Customer': f['Kd Customer'], Pembayaran: f.Pembayaran, Produk: detail,
@@ -1994,10 +1999,10 @@
     }
     function umFmtDate(d) { return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + d.getFullYear(); }
 
-    let _pkMap = null, _pkLen = -1;
+    let _pkMap = null, _pkSrc = null;   /* cache dibangun ulang bila array allData diganti (bukan hanya bila jumlahnya berubah) */
     function isTempoFk(fk) {
-      if (!_pkMap || _pkLen !== allData.length) {
-        _pkMap = new Map(); _pkLen = allData.length;
+      if (!_pkMap || _pkSrc !== allData) {
+        _pkMap = new Map(); _pkSrc = allData;
         allData.forEach(r => { const k = fkey(r); if (k && !_pkMap.has(k) && String(r.Pembayaran || '').trim()) _pkMap.set(k, /^tempo$/i.test(String(r.Pembayaran).trim())); });
       }
       return !!_pkMap.get(fk);
