@@ -739,6 +739,7 @@
           <button type="button" class="pb-btn" id="tgFillAll" title="Isi kolom CASH = TAGIHAN untuk semua faktur yang pembayarannya masih kosong (yang kurang/TITIP diubah manual)">✔ Bayar Penuh Semua (Cash)</button>
           <button type="button" class="pb-btn" id="tgExcel" title="Simpan Daftar Tagihan Harian ke Excel (1 sheet per salesman)">📥 Simpan Excel</button>
           <button type="button" class="pb-btn" id="tgPrint">🖨 Cetak</button>
+          <button type="button" class="pb-btn" id="tgArsip" title="Lihat / cetak ulang daftar tagihan tanggal sebelumnya">📚 Arsip</button>
           <button type="button" class="pb-btn danger" id="tgClear">Kosongkan</button>
           <div class="pb-info" id="tgInfo"></div>
         </div>
@@ -751,6 +752,7 @@
           <button type="button" class="pb-btn" id="umFill" title="Isi otomatis pembayaran penuh (Cash) + keterangan LUNAS untuk faktur yang pembayarannya masih kosong">✔ Isi Otomatis</button>
           <button type="button" class="pb-btn" id="umExcel" title="Simpan laporan ke file Excel">📥 Simpan Excel</button>
           <button type="button" class="pb-btn" id="umPrint">🖨 Cetak</button>
+          <button type="button" class="pb-btn" id="umArsip" title="Lihat / cetak ulang laporan uang masuk tanggal sebelumnya">📚 Arsip</button>
           <button type="button" class="pb-btn danger" id="umClear">Kosongkan</button>
           <div class="pb-info" id="umInfo"></div>
         </div>
@@ -2355,6 +2357,7 @@
     document.getElementById('umClear').addEventListener('click', async () => {
       if (!umItems.length) return;
       if (!confirm('Kosongkan seluruh laporan Uang Masuk (' + umItems.length + ' faktur)?\n\nData penjualan tidak ikut terhapus.')) return;
+      await arsipSaveUm(); pbToast('🗂 Tersimpan ke Arsip');
       umItems = []; umAfterChange(); umRender(); await umSave(); renderTab('lengkap');
     });
     document.getElementById('umPrint').addEventListener('click', () => {
@@ -2473,6 +2476,7 @@
       umAfterChange(); tgAfterChange();
       umItems.slice(-list.length).forEach(ttSyncUmItem);
       await umSave();
+      arsipSaveTg(tgKind); arsipSaveUm();
       tgRender(); renderTab('lengkap');
       pbToast('💰 ' + list.length + ' faktur dikirim ke Uang Masuk');
     }
@@ -2650,6 +2654,7 @@
       const n = tgItems.filter(x => (x.tab === 'T' ? 'T' : 'D') === tgKind).length;
       if (!n) return;
       if (!confirm('Kosongkan Data Tagihan ' + tgKindName() + ' (' + n + ' faktur)?\n\nData penjualan, Uang Masuk & tagihan ' + (tgKind === 'T' ? 'Cash' : 'Tempo') + ' tidak ikut terhapus.')) return;
+      await arsipSaveTg(tgKind); pbToast('🗂 Tersimpan ke Arsip');
       tgItems = tgItems.filter(x => (x.tab === 'T' ? 'T' : 'D') !== tgKind); tgPick.clear(); tgUpdatePickN(); tgAfterChange(); tgRender(); await tgSave(); renderTab('lengkap');
     });
     document.getElementById('tgPrint').addEventListener('click', () => {
@@ -2903,6 +2908,184 @@
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Cek Titip');
       XLSX.writeFile(wb, 'Cek Titip ' + umTodayISO() + '.xlsx');
     });
+
+    /* ===================== ARSIP RIWAYAT (Tagihan & Uang Masuk) ===================== */
+    /* Daftar hari itu disimpan otomatis ke arsip saat "Kirim ke Uang Masuk" dan "Kosongkan",
+       lalu bisa dilihat / dicetak ulang per tanggal lewat tombol 📚 Arsip. */
+    const AR_DB = 'pjarsip-v1' + DB_SFX, AR_ST = 'arsip';
+    function arDb() {
+      return new Promise((ok, no) => {
+        const q = indexedDB.open(AR_DB, 1);
+        q.onupgradeneeded = () => { if (!q.result.objectStoreNames.contains(AR_ST)) q.result.createObjectStore(AR_ST); };
+        q.onsuccess = () => { const db = q.result; db.onversionchange = () => db.close(); ok(db); };
+        q.onerror = () => no(q.error);
+      });
+    }
+    /* Simpan (gabung per faktur bila arsip tanggal yang sama sudah ada, jadi tidak ada yang tertimpa hilang) */
+    async function arPut(key, type, kind, date, items) {
+      if (!items.length) return;
+      try {
+        const db = await arDb();
+        try {
+          await new Promise((ok, no) => {
+            const tx = db.transaction(AR_ST, 'readwrite'), st = tx.objectStore(AR_ST), g = st.get(key);
+            g.onsuccess = () => {
+              const m = new Map(), old = g.result;
+              if (old && Array.isArray(old.items)) old.items.forEach(x => m.set(x.fk, x));
+              items.forEach(x => m.set(x.fk, JSON.parse(JSON.stringify(x))));
+              st.put({ type: type, kind: kind, date: date, items: Array.from(m.values()), saved: Date.now() }, key);
+            };
+            tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
+          });
+        } finally { db.close(); }
+      } catch (e) { console.error('Gagal menyimpan arsip:', e); }
+    }
+    async function arsipSaveTg(kind) {
+      const d = tgMeta.date || umTodayISO();
+      await arPut('tg|' + kind + '|' + d, 'tg', kind, d, tgItems.filter(x => (x.tab === 'T' ? 'T' : 'D') === kind));
+    }
+    async function arsipSaveUm() {
+      const d = umMeta.date || umTodayISO();
+      await arPut('um|' + d, 'um', '', d, umItems);
+    }
+    async function arList(type, kind) {
+      const db = await arDb();
+      try {
+        return await new Promise((ok, no) => {
+          const tx = db.transaction(AR_ST, 'readonly'), st = tx.objectStore(AR_ST), out = [];
+          const c = st.openCursor();
+          c.onsuccess = () => {
+            const cur = c.result;
+            if (cur) { const v = cur.value; if (v.type === type && (type === 'um' || v.kind === kind)) out.push({ key: cur.key, rec: v }); cur.continue(); }
+            else ok(out);
+          };
+          c.onerror = () => no(c.error);
+        });
+      } finally { db.close(); }
+    }
+    async function arDel(key) {
+      const db = await arDb();
+      try {
+        await new Promise((ok, no) => { const tx = db.transaction(AR_ST, 'readwrite'); tx.objectStore(AR_ST).delete(key); tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error); });
+      } finally { db.close(); }
+    }
+
+    const AR_CSS = '.ar-paper{font-family:Arial,sans-serif;color:#000;font-size:10.5pt;background:#fff}' +
+      '.ar-paper table{width:100%;border-collapse:collapse;margin-bottom:6px}' +
+      '.ar-paper th,.ar-paper td{border:1px solid #000;padding:1px 4px;line-height:1.25;white-space:nowrap}' +
+      '.ar-paper th{background:#E7E6E6;text-align:center}.ar-paper .c{text-align:center}.ar-paper .r{text-align:right}' +
+      '.ar-paper .sub{background:#F2F2F2;font-weight:700}.ar-paper .sec{background:#D9E1F2;font-weight:700}.ar-paper .nb{border:none;background:#fff}' +
+      '.ar-paper .ttl{font-size:14pt;font-weight:700;margin-bottom:6px}.ar-paper .meta{font-weight:700;line-height:1.5;margin-bottom:4px}' +
+      '.ar-paper .sheet{margin-bottom:30px;page-break-after:always}.ar-paper .sheet:last-child{page-break-after:auto}';
+    const arMon = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    const arDate = iso => { const d = new Date(iso + 'T00:00:00'); return HARI[d.getDay()] + ' ' + umFmtDate(d); };
+    const arSum = (arr, f) => arr.reduce((a, x) => a + umNum(x[f]), 0);
+    const arF = n => umFmt(n) || '0';
+
+    function arRenderTg(rec) {
+      const groups = [], gi = new Map();
+      rec.items.forEach(it => { if (!gi.has(it.sales)) { gi.set(it.sales, groups.length); groups.push({ sales: it.sales, items: [] }); } groups[gi.get(it.sales)].items.push(it); });
+      groups.forEach(g => g.items.sort((a, b) => ((a.jenis === 'M' ? 0 : 1) - (b.jenis === 'M' ? 0 : 1))));
+      const nm = rec.kind === 'T' ? 'TEMPO' : 'CASH';
+      return '<div class="ar-paper">' + groups.map(g => {
+        let h = '<div class="sheet"><div class="ttl">DAFTAR TAGIHAN HARIAN - ' + nm + '</div>' +
+          '<div class="meta"><div>SALESMAN/DROPING : ' + umEsc(g.sales) + '</div><div>TANGGAL : ' + umFmtDate(new Date(rec.date + 'T00:00:00')) + '</div></div>' +
+          '<table><thead><tr><th>NO</th><th>NO FAKTUR</th><th>NAMA OUTLET</th><th>ALAMAT</th><th>TGL FAKTUR</th><th>TGL TEMPO</th><th>TAGIHAN</th><th>CASH</th><th>TRANSFER</th><th>KET</th><th>CATATAN</th></tr></thead><tbody>';
+        g.items.forEach((it, k) => {
+          h += '<tr><td class="c">' + (k + 1) + '</td><td class="c">' + umEsc(it.noFaktur) + '</td><td>' + umEsc(it.toko) + '</td><td>' + umEsc(it.alamat) + '</td><td class="c">' + umEsc(it.tgl) + '</td><td class="c">' + umEsc(it.jt) + '</td>' +
+            '<td class="r">' + umFmt(it.tagihan) + '</td><td class="r">' + umFmt(it.pc) + '</td><td class="r">' + umFmt(it.pt) + '</td><td>' + (it.jenis === 'M' ? 'MINYAK' : 'RUPA2') + '</td><td>' + umEsc(it.ket) + '</td></tr>';
+        });
+        h += '<tr><td class="nb" colspan="5"></td><td class="sub c">TOTAL</td><td class="sub r">' + arF(arSum(g.items, 'tagihan')) + '</td><td class="sub r">' + arF(arSum(g.items, 'pc')) + '</td><td class="sub r">' + arF(arSum(g.items, 'pt')) + '</td><td class="sub"></td><td class="sub"></td></tr></tbody></table></div>';
+        return h;
+      }).join('') + '</div>';
+    }
+    function arRenderUm(rec) {
+      const sect = (title, first, tag, list) => {
+        let h = '<table><tbody><tr><td class="sec" colspan="14" style="border:none">' + title + '</td></tr></tbody></table>' +
+          '<table><thead><tr><th rowspan="2">NO</th><th rowspan="2">' + first + '</th><th rowspan="2">NO FAKTUR</th><th rowspan="2">NAMA TOKO</th><th rowspan="2">ALAMAT</th><th rowspan="2">TGL FAKTUR</th><th rowspan="2">JT</th><th rowspan="2">' + tag + '</th><th colspan="2">MINYAK</th><th colspan="2">RUPA-RUPA</th><th rowspan="2">KETERANGAN</th><th rowspan="2">TOTAL</th></tr>' +
+          '<tr><th>CASH</th><th>TRANSFER/BG</th><th>CASH</th><th>TRANSFER/BG</th></tr></thead><tbody>';
+        if (!list.length) h += '<tr><td colspan="14" class="c">-</td></tr>';
+        let lastS = null;
+        list.forEach((it, k) => {
+          const tot = arSum([it], 'mc') + arSum([it], 'mt') + arSum([it], 'rc') + arSum([it], 'rt');
+          h += '<tr><td class="c">' + (k + 1) + '</td><td class="c">' + (it.sales !== lastS ? umEsc(it.sales) : '') + '</td><td class="c">' + umEsc(it.noFaktur) + '</td><td>' + umEsc(it.toko) + '</td><td>' + umEsc(it.alamat) + '</td><td class="c">' + umEsc(it.tgl) + '</td><td class="c">' + umEsc(it.jt) + '</td><td class="r">' + umFmt(it.tagihan) + '</td>' +
+            ['mc', 'mt', 'rc', 'rt'].map(c => '<td class="r">' + umFmt(it[c]) + '</td>').join('') + '<td>' + umEsc(it.ket) + '</td><td class="r"><b>' + umFmt(tot) + '</b></td></tr>';
+          lastS = it.sales;
+        });
+        const t = ['mc', 'mt', 'rc', 'rt'].map(c => arSum(list, c));
+        h += '<tr><td class="nb" colspan="4"></td><td class="sub c" colspan="3">TOTAL</td><td class="sub r">' + arF(arSum(list, 'tagihan')) + '</td>' + t.map(v => '<td class="sub r">' + arF(v) + '</td>').join('') + '<td class="sub"></td><td class="sub r">' + arF(t.reduce((a, b) => a + b, 0)) + '</td></tr></tbody></table>';
+        return h;
+      };
+      const tempo = rec.items.filter(x => x.tab === 'T'), drop = rec.items.filter(x => x.tab !== 'T');
+      const cash = arSum(rec.items, 'mc') + arSum(rec.items, 'rc'), tf = arSum(rec.items, 'mt') + arSum(rec.items, 'rt');
+      return '<div class="ar-paper"><div class="ttl">LAPORAN UANG MASUK HARIAN</div>' +
+        '<div style="display:flex;justify-content:space-between;font-weight:700;margin-bottom:6px"><span>MINYAK &amp; RUPA-RUPA</span><span>' + arDate(rec.date) + '</span></div>' +
+        sect('PIUTANG TEMPO', 'SALES', 'TAGIHAN', tempo) + '<div style="height:10px"></div>' +
+        sect('CASH DROPPING', 'DROPING/SALES', 'NOMINAL FAKTUR', drop) +
+        '<div style="height:10px"></div><table style="width:auto"><tbody>' +
+        '<tr><td class="sub">TOTAL CASH</td><td class="sub r">' + arF(cash) + '</td></tr><tr><td class="sub">TOTAL TRANSFER</td><td class="sub r">' + arF(tf) + '</td></tr>' +
+        '<tr><td class="sub">TOTAL KESELURUHAN</td><td class="sub r">' + arF(cash + tf) + '</td></tr></tbody></table></div>';
+    }
+
+    function arClose() { const m = document.getElementById('arModal'); if (m) m.remove(); document.removeEventListener('keydown', arEsc); }
+    function arEsc(e) { if (e.key === 'Escape') arClose(); }
+    async function arsipOpen(type) {
+      arClose();
+      const kind = type === 'tg' ? tgKind : '';
+      let list = [];
+      try { list = await arList(type, kind); } catch (e) { console.error(e); }
+      list.sort((a, b) => b.rec.date.localeCompare(a.rec.date));
+      const title = type === 'tg' ? 'Arsip Data Tagihan ' + (kind === 'T' ? 'Tempo' : 'Cash') : 'Arsip Uang Masuk';
+      const m = document.createElement('div'); m.id = 'arModal';
+      m.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px';
+      m.innerHTML = '<div style="background:#fff;color:#000;border-radius:10px;width:min(1250px,100%);height:min(92vh,100%);display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)">' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid #ddd">' +
+        '<b style="font-size:1.05rem">📚 ' + title + '</b>' +
+        '<select id="arSel" style="padding:5px;min-width:260px"></select>' +
+        '<button type="button" class="pb-btn" id="arPrint">🖨 Cetak</button>' +
+        '<button type="button" class="pb-btn danger" id="arRemove">Hapus arsip ini</button>' +
+        '<span id="arInfo" style="color:#666;font-size:.85rem"></span>' +
+        '<button type="button" class="pb-btn" id="arCloseBtn" style="margin-left:auto">✕ Tutup</button></div>' +
+        '<div id="arBody" style="flex:1;overflow:auto;padding:14px;background:#fff"></div></div>';
+      document.body.appendChild(m);
+      document.addEventListener('keydown', arEsc);
+      m.addEventListener('click', e => { if (e.target === m) arClose(); });
+      document.getElementById('arCloseBtn').onclick = arClose;
+      const sel = document.getElementById('arSel'), body = document.getElementById('arBody'), info = document.getElementById('arInfo');
+      const show = () => {
+        const it = list.find(x => x.key === sel.value);
+        if (!it) { body.innerHTML = '<div style="text-align:center;color:#777;padding:40px">Belum ada arsip. Arsip tersimpan otomatis saat Anda menekan "Kirim ke Uang Masuk" atau "Kosongkan".</div>'; info.textContent = ''; return; }
+        body.innerHTML = '<style>' + AR_CSS + '</style>' + (type === 'tg' ? arRenderTg(it.rec) : arRenderUm(it.rec));
+        info.textContent = it.rec.items.length + ' faktur';
+      };
+      if (!list.length) { sel.innerHTML = '<option>(kosong)</option>'; sel.disabled = true; }
+      else {
+        let cur = '', h = '';
+        list.forEach(x => {
+          const d = new Date(x.rec.date + 'T00:00:00'), g = arMon[d.getMonth()] + ' ' + d.getFullYear();
+          if (g !== cur) { if (cur) h += '</optgroup>'; h += '<optgroup label="' + g + '">'; cur = g; }
+          h += '<option value="' + umEsc(x.key) + '">' + arDate(x.rec.date) + ' · ' + x.rec.items.length + ' faktur</option>';
+        });
+        sel.innerHTML = h + '</optgroup>';
+      }
+      sel.onchange = show; show();
+      document.getElementById('arPrint').onclick = () => {
+        const it = list.find(x => x.key === sel.value); if (!it) return;
+        const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+        document.body.appendChild(f);
+        const w = f.contentWindow; w.document.open();
+        w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>' + title + '</title><style>@page{size:A4 landscape;margin:8mm}body{margin:0}' + AR_CSS + '.ar-paper{zoom:.8}</style></head><body>' + (type === 'tg' ? arRenderTg(it.rec) : arRenderUm(it.rec)) + '</body></html>');
+        w.document.close();
+        setTimeout(() => { w.focus(); w.print(); setTimeout(() => f.remove(), 1500); }, 250);
+      };
+      document.getElementById('arRemove').onclick = async () => {
+        const it = list.find(x => x.key === sel.value); if (!it) return;
+        if (!confirm('Hapus arsip ' + arDate(it.rec.date) + ' (' + it.rec.items.length + ' faktur)? Tidak bisa dikembalikan.')) return;
+        await arDel(it.key); arsipOpen(type);
+      };
+    }
+    document.getElementById('tgArsip').addEventListener('click', () => arsipOpen('tg'));
+    document.getElementById('umArsip').addEventListener('click', () => arsipOpen('um'));
 
     loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(ttLoad).then(loadPJ);
   </script>
