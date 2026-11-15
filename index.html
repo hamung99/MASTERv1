@@ -365,6 +365,10 @@
     td.fk-nol { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
     :root[data-theme="dark"] td.fk-nol { color:#6b7280; }
     tr.row-batal td, tr.row-pair td.ln { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
+    tr.row-ib td.ln { text-decoration: line-through; text-decoration-color:#9ca3af; color:#9ca3af; }
+    :root[data-theme="dark"] tr.row-ib td.ln { color:#6b7280; }
+    td.fk-link { cursor:pointer; color:#1565c0; text-decoration:underline dotted; }
+    td.fk-link:hover { background:#e3f2fd; }
     tr.row-batal td { background:#f3f4f6; }
     tr.row-batal td.total-faktur-cell { background:#f3f4f6 !important; }
     .bd { display:inline-block; margin-left:5px; padding:0 6px; border-radius:4px; font-size:.64rem; font-weight:700; text-decoration:none; vertical-align:middle; }
@@ -1299,6 +1303,7 @@
       })();
 
       applyHargaOverrides();
+      ibAssignKeys(); ibApplyState();   /* kunci item + terapkan item yang dibatalkan */
       allData.sort((a, b) => {
         const da = sortKey(a.Tanggal);
         const db = sortKey(b.Tanggal);
@@ -1381,10 +1386,11 @@
       analyzeInvoices();
 
       // Total per faktur dihitung dari SELURUH item (tanpa filter apapun)
-      invTotals = new Map();
+      invTotals = new Map(); ibFk = new Set();
       allData.forEach(r => {
         const k = fkey(r);
         if (!k) return;
+        if (r._ib) ibFk.add(k);
         invTotals.set(k, (invTotals.get(k) || 0) + (Number(r.Total) || 0));
       });
 
@@ -1515,7 +1521,7 @@
         const fk = fkey(r);
         const show = !fk || st.firstIdx.get(fk) === start + i;
         const totalFaktur = fk ? (invTotals.get(fk) || 0) : (Number(r.Total) || 0);
-        const rcls = batalMap[fk] ? 'row-batal' : (r._pair ? 'row-pair' : '');
+        const rcls = batalMap[fk] ? 'row-batal' : (r._ib ? 'row-ib' : (r._pair ? 'row-pair' : ''));
         html += '<tr' + (rcls ? ' class="' + rcls + '"' : '') + '>';
         let umc = '';
         if (show && fk && !batalMap[fk]) {
@@ -1529,11 +1535,12 @@
           totTxt = formatNum(totalFaktur);
           if (batalMap[fk]) totTxt += '<span class="bd bd-batal">BATAL</span>';
           else if (invKind[fk] === 'NOL') totTxt += '<span class="bd bd-nol" title="Total faktur nol — lihat tab Pelacak Batal">NOL</span>';
+          else if (ibFk.has(fk)) totTxt += '<span class="bd bd-parsial" title="Ada item yang dibatalkan lewat tombol Batal. Total sudah dikurangi.">ITEM BATAL</span>';
           else if (invKind[fk] === 'PARSIAL') totTxt += '<span class="bd bd-parsial" title="Ada item yang dibatalkan (dicoret). Total sudah bersih.">ITEM BATAL</span>';
         }
         const kat = MINYAK_RE.test(String(r.Produk || '')) ? 'MINYAK' : 'RUPA-RUPA';
         html += '<td class="center">' + (show ? (r.Tanggal || '') : '') + '</td>';
-        html += '<td class="center' + (show && invKind[fk] === 'NOL' ? ' fk-nol' : '') + '">' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
+        html += '<td class="center' + (show && invKind[fk] === 'NOL' ? ' fk-nol' : '') + (show && fk ? ' fk-link' : '') + '"' + (show && fk ? ' data-fk="' + pe(fk) + '" title="Klik: lihat detail / batalkan faktur atau item"' : '') + '>' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
         html += '<td class="center">' + (show ? (r.Sales || '') : '') + '</td>';
         html += '<td class="col-customer">' + (show ? (r.Customer || '') : '') + '</td>';
         html += '<td class="col-alamat">' + (show ? (r.Alamat || '') : '') + '</td>';
@@ -1541,11 +1548,11 @@
         html += '<td class="num' + (show ? ' total-faktur-cell' : '') + '">' + totTxt + '</td>';
         html += '<td class="center">' + (show ? (r.Pembayaran || '') : '') + '</td>';
         html += '<td class="col-produk ln">' + (r.Produk || '') + '</td>';
-        html += '<td class="center ln">' + formatNum(r.Jumlah) + '</td>';
+        html += '<td class="center ln">' + formatNum(ibQ(r)) + '</td>';
         html += '<td class="center ln">' + (r.Satuan || '') + '</td>';
         html += '<td class="num ln">' + formatNum(r['Harga Jual']) + '</td>';
         html += '<td class="center ln">' + formatNum(r.Discount) + '</td>';
-        html += '<td class="num ln">' + formatNum(r.Total) + '</td>';
+        html += '<td class="num ln">' + formatNum(ibT(r)) + '</td>';
         html += '<td class="center">' + (show ? (r['Kd Customer'] || '') : '') + '</td>';
         html += (r._hbOrig !== undefined ? '<td class="num ln hb-mod" title="Harga beli diubah (asal: ' + formatNum(r._hbOrig) + ')">' : '<td class="num ln">') + formatNum(r['Harga Beli']) + '</td>';
         html += '</tr>';
@@ -1619,6 +1626,149 @@
       } finally { db.close(); }
       if (!quiet) { try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('penjualan'); bc.close(); } catch (e) {} }
     }
+    /* ===================== BATAL PER FAKTUR / PER ITEM (modal di Data Penjualan) ===================== */
+    /* Item yang dibatalkan dibuat bernilai 0 (Total & Jumlah) pada salinan baris, sehingga semua tab,
+       Tagihan dan Uang Masuk otomatis memakai angka yang sudah dikurangi. Nilai asli disimpan di _ibT / _ibJ. */
+    const IB_DB = 'pjitembatal-v1' + DB_SFX, IB_ST = 'pjitembatal-data';
+    let itemBatal = {};          /* kunci item -> { at, fk } */
+    let ibFk = new Set();        /* faktur yang punya item dibatalkan (untuk lencana di tabel) */
+    const ibQ = r => r._ib ? r._ibJ : r.Jumlah;
+    const ibT = r => r._ib ? r._ibT : r.Total;
+    function ibOpen() {
+      return new Promise((ok, no) => {
+        const q = indexedDB.open(IB_DB, 1);
+        q.onupgradeneeded = () => { if (!q.result.objectStoreNames.contains(IB_ST)) q.result.createObjectStore(IB_ST); };
+        q.onsuccess = () => { const db = q.result; db.onversionchange = () => db.close(); ok(db); };
+        q.onerror = () => no(q.error);
+      });
+    }
+    async function ibLoad() {
+      try {
+        const db = await ibOpen();
+        const v = await new Promise((ok, no) => {
+          const r = db.transaction(IB_ST, 'readonly').objectStore(IB_ST).get('latest');
+          r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error);
+        });
+        db.close();
+        itemBatal = (v && v.items) || {};
+      } catch (e) { console.error('Gagal memuat batal item:', e); }
+    }
+    async function ibSave() {
+      const db = await ibOpen();
+      try {
+        await new Promise((ok, no) => {
+          const tx = db.transaction(IB_ST, 'readwrite');
+          tx.objectStore(IB_ST).put({ items: itemBatal }, 'latest');
+          tx.oncomplete = ok; tx.onerror = tx.onabort = () => no(tx.error);
+        });
+      } finally { db.close(); }
+      try { const bc = new BroadcastChannel(BC_NAME); bc.postMessage('penjualan'); bc.close(); } catch (e) {}
+    }
+    /* Beri kunci tetap tiap baris: faktur|produk|jumlah|urutan ke-n (urutan sesuai file, sebelum diurutkan ulang) */
+    function ibAssignKeys() {
+      const cnt = new Map();
+      allData.forEach(r => {
+        const fk = fkey(r); if (!fk) return;
+        const q = r._ib ? r._ibJ : r.Jumlah;
+        const base = fk + '|' + normProd(r.Produk) + '|' + Math.round((Number(q) || 0) * 1e6);
+        const n = (cnt.get(base) || 0) + 1; cnt.set(base, n);
+        r._ik = base + '|' + n;
+      });
+    }
+    function ibApplyState() {
+      allData = allData.map(r => {
+        const ik = r._ik; if (!ik) return r;
+        const want = !!itemBatal[ik];
+        if (want && !r._ib) return Object.assign({}, r, { _ib: true, _ibT: r.Total, _ibJ: r.Jumlah, Total: 0, Jumlah: 0 });
+        if (!want && r._ib) { const c = Object.assign({}, r, { Total: r._ibT, Jumlah: r._ibJ }); delete c._ib; delete c._ibT; delete c._ibJ; return c; }
+        return r;
+      });
+    }
+    function ibRefresh() {
+      const sv = {}; for (const k in tabState) sv[k] = { search: tabState[k].search, page: tabState[k].page };
+      ibApplyState();
+      buildTabData();
+      for (const k in sv) { tabState[k].search = sv[k].search; tabState[k].page = sv[k].page; }
+      renderTab(currentTab);
+    }
+    async function ibApply(fk, ids, cancel) {
+      if (!ids.length) return;
+      ids.forEach(ik => { if (cancel) itemBatal[ik] = { at: Date.now(), fk: fk }; else delete itemBatal[ik]; });
+      const lines = allData.filter(r => fkey(r) === fk && r._ik);
+      const live = lines.filter(r => !r._pair);
+      const allCancelled = live.length > 0 && live.every(r => itemBatal[r._ik]);
+      let batalChanged = false;
+      if (allCancelled && !batalMap[fk]) {
+        const f = lines[0], pos = lines.filter(r => ibQ(r) > 0);
+        batalMap[fk] = { at: Date.now(), via: 'modal', snap: {
+          Tanggal: f.Tanggal, 'No. Faktur': f['No. Faktur'], Customer: f.Customer, Sales: f.Sales, Pembayaran: f.Pembayaran,
+          detail: (pos.length ? pos : lines).map(r => r.Produk + ' ×' + formatNum(Math.abs(ibQ(r))) + ' (' + formatNum(Math.abs(ibT(r))) + ')').join('; '),
+          nilai: pos.reduce((a, r) => a + Math.abs(Number(ibT(r)) || 0), 0), total: 0 } };
+        batalChanged = true;
+      } else if (!allCancelled && batalMap[fk] && batalMap[fk].via === 'modal') { delete batalMap[fk]; batalChanged = true; }
+      try { await ibSave(); if (batalChanged) await saveBatal(true); } catch (e) { console.error(e); pbToast('Gagal menyimpan pembatalan'); }
+      ibRefresh();
+      pbToast(cancel ? '🚫 ' + ids.length + ' item dibatalkan — total faktur dikurangi' : '↩ ' + ids.length + ' item dikembalikan');
+    }
+    function ibClose() { const m = document.getElementById('ibModal'); if (m) m.remove(); document.removeEventListener('keydown', ibEsc); }
+    function ibEsc(e) { if (e.key === 'Escape') ibClose(); }
+    function ibOpenModal(fk) {
+      ibClose();
+      const lines = allData.filter(r => fkey(r) === fk);
+      if (!lines.length) return;
+      const f = lines[0], sel = new Set();
+      const m = document.createElement('div'); m.id = 'ibModal';
+      m.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:12px';
+      document.body.appendChild(m);
+      document.addEventListener('keydown', ibEsc);
+      m.addEventListener('click', e => { if (e.target === m) ibClose(); });
+      const draw = () => {
+        const cur = allData.filter(r => fkey(r) === fk);
+        if (!cur.length) { ibClose(); return; }
+        const tNow = cur.reduce((a, r) => a + (Number(r.Total) || 0), 0), tOri = cur.reduce((a, r) => a + (Number(ibT(r)) || 0), 0);
+        const canSel = r => r._ik && !r._pair;
+        const selCancel = cur.filter(r => canSel(r) && !r._ib && sel.has(r._ik)), selRestore = cur.filter(r => canSel(r) && r._ib && sel.has(r._ik));
+        const nActive = cur.filter(r => canSel(r) && !r._ib).length, nCancelled = cur.filter(r => r._ib).length;
+        const sent = (typeof tgSet !== 'undefined' && tgSet.has(fk)) || (typeof umSet !== 'undefined' && umSet.has(fk));
+        const th = 'padding:4px 8px;border:1px solid #ccc;background:#eee;text-align:center', td = 'padding:3px 8px;border:1px solid #ddd';
+        const rows = cur.map(r => {
+          const strike = r._ib ? 'text-decoration:line-through;color:#9ca3af;' : (r._pair ? 'color:#9ca3af;' : '');
+          return '<tr style="' + (r._ib ? 'background:#f3f4f6' : '') + '"><td style="' + td + ';text-align:center">' +
+            (canSel(r) ? '<input type="checkbox" data-ik="' + pe(r._ik) + '"' + (sel.has(r._ik) ? ' checked' : '') + '>' : '') + '</td>' +
+            '<td style="' + td + ';' + strike + '">' + pe(r.Produk) + '</td>' +
+            '<td style="' + td + ';text-align:center;' + strike + '">' + formatNum(ibQ(r)) + '</td>' +
+            '<td style="' + td + ';text-align:center;' + strike + '">' + pe(r.Satuan) + '</td>' +
+            '<td style="' + td + ';text-align:right;' + strike + '">' + formatNum(r['Harga Jual']) + '</td>' +
+            '<td style="' + td + ';text-align:center;' + strike + '">' + formatNum(r.Discount) + '</td>' +
+            '<td style="' + td + ';text-align:right;' + strike + '">' + formatNum(ibT(r)) + '</td>' +
+            '<td style="' + td + ';text-align:center;font-weight:700;color:' + (r._ib ? '#b91c1c' : '#6b7280') + '">' + (r._ib ? 'DIBATALKAN' : (r._pair ? 'Dicoret otomatis' : '')) + '</td></tr>';
+        }).join('');
+        m.innerHTML = '<div style="background:#fff;color:#000;border-radius:10px;width:min(980px,100%);max-height:92vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.4)">' +
+          '<div style="padding:12px 16px;border-bottom:1px solid #ddd"><div style="display:flex;align-items:center;gap:10px"><b style="font-size:1.05rem">Faktur ' + pe(f['No. Faktur']) + '</b><button type="button" id="ibX" class="pb-btn" style="margin-left:auto">✕ Tutup</button></div>' +
+          '<div style="margin-top:6px;font-size:.88rem;line-height:1.5">' + pe(f.Tanggal) + ' · <b>' + pe(f.Customer) + '</b> · ' + pe(f.Alamat) + ' · Sales: ' + pe(f.Sales) + ' · ' + pe(f.Pembayaran) + '</div>' +
+          '<div style="margin-top:6px;font-size:.95rem">Total faktur sekarang: <b>Rp ' + formatNum(tNow) + '</b>' + (tNow !== tOri ? ' <span style="color:#6b7280">(asli Rp ' + formatNum(tOri) + ')</span>' : '') + '</div>' +
+          (sent ? '<div style="margin-top:6px;padding:5px 8px;background:#fff7ed;border:1px solid #fdba74;border-radius:6px;font-size:.82rem">⚠ Faktur ini sudah dikirim ke Data Tagihan / Uang Masuk. Pembatalan di sini tidak mengubah angka yang sudah ada di sana.</div>' : '') + '</div>' +
+          '<div style="overflow:auto;padding:10px 16px"><table style="width:100%;border-collapse:collapse;font-size:.88rem"><thead><tr><th style="' + th + '"><input type="checkbox" id="ibAll" title="Pilih semua item"></th><th style="' + th + '">Produk</th><th style="' + th + '">Jumlah</th><th style="' + th + '">Satuan</th><th style="' + th + '">Harga Jual</th><th style="' + th + '">Disc</th><th style="' + th + '">Total</th><th style="' + th + '">Status</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-top:1px solid #ddd">' +
+          '<button type="button" class="pb-btn danger" id="ibCancelSel"' + (selCancel.length ? '' : ' disabled') + '>🚫 Batalkan item terpilih (' + selCancel.length + ')</button>' +
+          '<button type="button" class="pb-btn" id="ibRestoreSel"' + (selRestore.length ? '' : ' disabled') + '>↩ Kembalikan item terpilih (' + selRestore.length + ')</button>' +
+          '<button type="button" class="pb-btn danger" id="ibCancelAll" style="margin-left:auto"' + (nActive ? '' : ' disabled') + '>🚫 Batalkan seluruh faktur</button>' +
+          '<button type="button" class="pb-btn" id="ibRestoreAll"' + (nCancelled ? '' : ' disabled') + '>↩ Kembalikan seluruh faktur</button></div></div>';
+        m.querySelector('#ibX').onclick = ibClose;
+        m.querySelectorAll('input[data-ik]').forEach(c => c.onchange = () => { if (c.checked) sel.add(c.dataset.ik); else sel.delete(c.dataset.ik); draw(); });
+        const all = m.querySelector('#ibAll'), selectable = cur.filter(canSel);
+        all.checked = selectable.length > 0 && selectable.every(r => sel.has(r._ik));
+        all.onchange = () => { selectable.forEach(r => { if (all.checked) sel.add(r._ik); else sel.delete(r._ik); }); draw(); };
+        const run = async (ids, cancel, msg) => { if (msg && !confirm(msg)) return; sel.clear(); await ibApply(fk, ids, cancel); draw(); };
+        m.querySelector('#ibCancelSel').onclick = () => run(selCancel.map(r => r._ik), true, 'Batalkan ' + selCancel.length + ' item? Nilainya dikeluarkan dari total faktur.');
+        m.querySelector('#ibRestoreSel').onclick = () => run(selRestore.map(r => r._ik), false);
+        m.querySelector('#ibCancelAll').onclick = () => run(cur.filter(r => canSel(r) && !r._ib).map(r => r._ik), true, 'Batalkan SELURUH faktur ' + (f['No. Faktur'] || '') + '? Total faktur menjadi 0. Bisa dikembalikan lagi.');
+        m.querySelector('#ibRestoreAll').onclick = () => run(cur.filter(r => r._ib).map(r => r._ik), false);
+      };
+      draw();
+    }
+    document.addEventListener('click', e => { const td = e.target.closest && e.target.closest('td.fk-link'); if (td && td.dataset.fk) ibOpenModal(td.dataset.fk); });
+
     function pbToast(t) {
       const e = document.getElementById('pbToast'); e.textContent = t; e.classList.add('show');
       clearTimeout(pbToast._t); pbToast._t = setTimeout(() => e.classList.remove('show'), 3500);
@@ -1664,9 +1814,9 @@
         const pairs = lines.filter(r => r._pair);
         if (!isNol && !pairs.length) return;
         const f = lines[0];
-        const src = isNol ? lines.filter(r => r.Jumlah > 0) : pairs.filter(r => r.Jumlah > 0);
-        const nilai = src.reduce((s, r) => s + Math.abs(r.Total), 0);
-        const detail = (src.length ? src : lines).map(r => r.Produk + ' ×' + formatNum(Math.abs(r.Jumlah)) + ' (' + formatNum(Math.abs(r.Total)) + ')').join('; ');
+        const src = isNol ? lines.filter(r => ibQ(r) > 0) : pairs.filter(r => r.Jumlah > 0);
+        const nilai = src.reduce((s, r) => s + Math.abs(ibT(r)), 0);
+        const detail = (src.length ? src : lines).map(r => r.Produk + ' ×' + formatNum(Math.abs(ibQ(r))) + ' (' + formatNum(Math.abs(ibT(r))) + ')').join('; ');
         invKind[k] = isNol ? 'NOL' : 'PARSIAL';
         /* Faktur yang sudah ditandai batal tetapi sekarang PARSIAL: cukup 1 baris (baris arsip di bawah, yang punya
            checkbox untuk mengembalikan). Tanpa ini faktur yang sama muncul dua kali. */
@@ -3103,7 +3253,7 @@
     document.getElementById('tgArsip').addEventListener('click', () => arsipOpen('tg'));
     document.getElementById('umArsip').addEventListener('click', () => arsipOpen('um'));
 
-    loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(ttLoad).then(loadPJ);
+    loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(ttLoad).then(ibLoad).then(loadPJ);
   </script>
 <script src="backup.js"></script>
 <script>

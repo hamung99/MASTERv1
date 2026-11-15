@@ -20,7 +20,8 @@
     { db: 'pjharga-v1', st: 'pjharga-data' },
     { db: 'pjuangmasuk-v1', st: 'pjuangmasuk-data' },
     { db: 'pjtagihan-v1', st: 'pjtagihan-data' },
-    { db: 'pjtitip-v1', st: 'pjtitip-data' }];   // Cek Titip
+    { db: 'pjtitip-v1', st: 'pjtitip-data' },
+    { db: 'pjitembatal-v1', st: 'pjitembatal-data' }];   // Batal item per faktur   // Cek Titip
   var D_ARSIP = { db: 'pjarsip-v1', st: 'arsip' };   // Arsip riwayat Tagihan & Uang Masuk (banyak kunci)
   var D_PARSE = { db: 'pj-parse-v1', st: 'c' };
 
