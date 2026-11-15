@@ -737,6 +737,7 @@
           <label>Tanggal tagihan <input type="date" id="tgDate" class="um-date"></label>
           <button type="button" class="pb-btn um-send" id="tgToUm" title="Kirim faktur yang dicentang ke halaman Uang Masuk">💰 Kirim ke Uang Masuk (<span id="tgPickN">0</span>)</button>
           <button type="button" class="pb-btn" id="tgFillAll" title="Isi kolom CASH = TAGIHAN untuk semua faktur yang pembayarannya masih kosong (yang kurang/TITIP diubah manual)">✔ Bayar Penuh Semua (Cash)</button>
+          <button type="button" class="pb-btn" id="tgPayClear" title="Kosongkan kolom CASH & TRANSFER semua faktur yang belum dikirim ke Uang Masuk">↺ Kosongkan Pembayaran</button>
           <button type="button" class="pb-btn" id="tgExcel" title="Simpan Daftar Tagihan Harian ke Excel (1 sheet per salesman)">📥 Simpan Excel</button>
           <button type="button" class="pb-btn" id="tgPrint">🖨 Cetak</button>
           <button type="button" class="pb-btn" id="tgArsip" title="Lihat / cetak ulang daftar tagihan tanggal sebelumnya">📚 Arsip</button>
@@ -2587,6 +2588,14 @@
       });
       tgRender(); await tgSave();
       pbToast(n ? '✔ ' + n + ' faktur diisi Cash = Tagihan' : 'Tidak ada baris kosong');
+    });
+    document.getElementById('tgPayClear').addEventListener('click', async () => {
+      const list = tgItems.filter(it => (it.tab === 'T' ? 'T' : 'D') === tgKind && !umSet.has(it.fk) && (umNum(it.pc) || umNum(it.pt)));
+      if (!list.length) { pbToast('Tidak ada pembayaran yang terisi'); return; }
+      if (!confirm('Kosongkan kolom CASH & TRANSFER pada ' + list.length + ' faktur Tagihan ' + tgKindName() + '?\n\nFaktur yang sudah dikirim ke Uang Masuk tidak berubah.')) return;
+      list.forEach(it => { it.pc = 0; it.pt = 0; if (/^(LUNAS|TITIP)$/i.test(String(it.ket || '').trim())) it.ket = ''; });
+      tgRender(); await tgSave();
+      pbToast('↺ Pembayaran ' + list.length + ' faktur dikosongkan');
     });
     /* Status tombol C/T: 'c' / 't' bila tagihan dibayar penuh lewat Cash / Transfer, selain itu '' */
     function tgFillState(it) {
