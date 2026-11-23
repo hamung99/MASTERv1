@@ -1,7 +1,7 @@
 {
-  "name": "Laporan Penjualan",
-  "short_name": "Laporan PJ",
-  "description": "Laporan Penjualan, Data Tagihan & Uang Masuk (online & offline)",
+  "name": "Tagihan & Uang Masuk",
+  "short_name": "Tagihan & Uang Masuk",
+  "description": "Data Tagihan & Uang Masuk (online & offline)",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

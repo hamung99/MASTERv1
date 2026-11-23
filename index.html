@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#1b5e20">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Laporan PJ">
+  <meta name="apple-mobile-web-app-title" content="Tagihan &amp; Uang Masuk">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <title>Laporan Penjualan - Multi Bulan</title>
+  <title>Tagihan &amp; Uang Masuk</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
   <style>
@@ -926,7 +926,7 @@
     const APP_YEAR = '2026';
     const DB_SFX = APP_YEAR === '2026' ? '' : '-' + APP_YEAR;
     const BC_NAME = 'laporan-data' + DB_SFX;
-    document.title = 'Laporan Penjualan ' + APP_YEAR + ' - Multi Bulan';
+    document.title = 'Tagihan & Uang Masuk ' + APP_YEAR;
     const PJ_DB = 'pj-v1' + DB_SFX, PJ_ST = 'pj-data';
     function pjOpen() {
       return new Promise((ok, no) => {
