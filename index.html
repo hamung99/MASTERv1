@@ -746,10 +746,12 @@
           <button type="button" class="pb-btn um-send" id="tgToUm" title="Kirim faktur yang dicentang ke halaman Uang Masuk">💰 Kirim ke Uang Masuk (<span id="tgPickN">0</span>)</button>
           <button type="button" class="pb-btn" id="tgFillAll" title="Isi kolom CASH = TAGIHAN untuk semua faktur yang pembayarannya masih kosong (yang kurang/TITIP diubah manual)">✔ Bayar Penuh Semua (Cash)</button>
           <button type="button" class="pb-btn" id="tgPayClear" title="Kosongkan kolom CASH & TRANSFER semua faktur yang belum dikirim ke Uang Masuk">↺ Kosongkan Pembayaran</button>
-          <button type="button" class="pb-btn" id="tgExcel" title="Simpan Daftar Tagihan Harian ke Excel (1 sheet per salesman)">📥 Simpan Excel</button>
-          <button type="button" class="pb-btn" id="tgPrint">🖨 Cetak</button>
-          <button type="button" class="pb-btn" id="tgArsip" title="Lihat / cetak ulang daftar tagihan tanggal sebelumnya">📚 Arsip</button>
-          <button type="button" class="pb-btn danger" id="tgClear">Kosongkan</button>
+          <div class="tg-right" style="display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;margin-left:auto;justify-content:flex-end">
+            <button type="button" class="pb-btn" id="tgPrint">🖨 Cetak</button>
+            <button type="button" class="pb-btn" id="tgExcel" title="Simpan Daftar Tagihan Harian ke Excel (1 sheet per salesman)">📥 Simpan Excel</button>
+            <button type="button" class="pb-btn danger" id="tgClear">Kosongkan</button>
+            <button type="button" class="pb-btn" id="tgArsip" title="Lihat / cetak ulang daftar tagihan tanggal sebelumnya">📚 Arsip</button>
+          </div>
           <div class="pb-info" id="tgInfo"></div>
         </div>
         <div class="um-scroll" id="tgScroll"><div class="um-paper" id="tgPaper"></div></div>
