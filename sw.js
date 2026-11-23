@@ -1,7 +1,7 @@
-/* Service Worker - Laporan Penjualan (online + offline)
+/* Service Worker - Tagihan & Uang Masuk (online + offline)
    Naikkan angka VER setiap kali upload versi baru agar perangkat lain yang sedang terbuka tahu ada update. */
-const VER = 'pj-v2';
-const SHELL = ['./', 'index.html', 'theme.js', 'backup.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
+const VER = 'pj-v3';
+const SHELL = ['./', 'index.html', 'theme.js', 'backup.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png'];
 const CDN = [
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js'
