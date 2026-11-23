@@ -737,7 +737,11 @@
       </div>
 
       <div class="tab-content" id="tab-tagihan">
-        <div class="pb-bar um-tools">
+        <div class="pb-bar um-noprint" id="tgSubBar" style="gap:6px">
+          <button type="button" class="um-btn active" id="tgSubA">📝 Daftar Aktif</button>
+          <button type="button" class="um-btn" id="tgSubP" title="Daftar tagihan yang pernah dicetak (tersimpan otomatis saat tombol Cetak ditekan)">🖨 Sudah Dicetak <span class="tab-n" id="tgSubPN"></span></button>
+        </div>
+        <div class="pb-bar um-tools" id="tgBar">
           <label>Tanggal tagihan <input type="date" id="tgDate" class="um-date"></label>
           <button type="button" class="pb-btn um-send" id="tgToUm" title="Kirim faktur yang dicentang ke halaman Uang Masuk">💰 Kirim ke Uang Masuk (<span id="tgPickN">0</span>)</button>
           <button type="button" class="pb-btn" id="tgFillAll" title="Isi kolom CASH = TAGIHAN untuk semua faktur yang pembayarannya masih kosong (yang kurang/TITIP diubah manual)">✔ Bayar Penuh Semua (Cash)</button>
@@ -748,7 +752,16 @@
           <button type="button" class="pb-btn danger" id="tgClear">Kosongkan</button>
           <div class="pb-info" id="tgInfo"></div>
         </div>
-        <div class="um-scroll"><div class="um-paper" id="tgPaper"></div></div>
+        <div class="um-scroll" id="tgScroll"><div class="um-paper" id="tgPaper"></div></div>
+        <div id="tgPrinted" class="um-noprint" style="display:none">
+          <div class="pb-bar" style="gap:8px">
+            <select id="tgpSel" style="padding:5px;min-width:260px"></select>
+            <button type="button" class="pb-btn" id="tgpPrint">🖨 Cetak Ulang</button>
+            <button type="button" class="pb-btn danger" id="tgpDel">Hapus</button>
+            <span id="tgpInfo" style="color:#666;font-size:.85rem"></span>
+          </div>
+          <div id="tgpBody" style="overflow:auto;padding:14px;background:#fff;color:#000;border:1px solid #ddd;border-radius:6px"></div>
+        </div>
       </div>
 
       <div class="tab-content" id="tab-uangmasuk">
@@ -780,6 +793,7 @@
     let tgItems = [];
     let tgSet = new Set();
     const tgPick = new Set();
+    let tgSub = 'A';
     let tgMeta = { date: '' };
     const umPick = new Set();
     let umMeta = { date: '' };
@@ -2652,6 +2666,7 @@
       tgTabBtnC.classList.toggle('active', kind === 'D');
       globalSearch.value = '';
       tgRender();
+      if (typeof tgSubSet === 'function') tgSubSet(tgSub);
     }
     tgTabBtn.addEventListener('click', () => tgShow('T'));
     tgTabBtnC.addEventListener('click', () => tgShow('D'));
@@ -2830,6 +2845,7 @@
       const done = () => { document.body.classList.remove('um-printing'); const x = document.getElementById('umPageStyle'); if (x) x.remove(); window.removeEventListener('afterprint', done); };
       window.addEventListener('afterprint', done);
       document.querySelectorAll('#tgPaper .um-in').forEach(x => x.blur());
+      tgpSave();
       window.print();
     });
 
@@ -3252,6 +3268,60 @@
     }
     document.getElementById('tgArsip').addEventListener('click', () => arsipOpen('tg'));
     document.getElementById('umArsip').addEventListener('click', () => arsipOpen('um'));
+
+    /* ===== SUB TAB "Sudah Dicetak": salinan daftar tagihan yang pernah dicetak (tersimpan otomatis saat tombol Cetak ditekan) ===== */
+    async function tgpSave() {
+      const d = tgMeta.date || umTodayISO();
+      await arPut('tgp|' + tgKind + '|' + d, 'tgp', tgKind, d, tgItems.filter(x => (x.tab === 'T' ? 'T' : 'D') === tgKind));
+      tgpCount(); if (tgSub === 'P') tgpRender();
+    }
+    async function tgpCount() {
+      try { const l = await arList('tgp', tgKind); document.getElementById('tgSubPN').textContent = l.length || ''; } catch (e) {}
+    }
+    function tgSubSet(s) {
+      tgSub = s;
+      document.getElementById('tgSubA').classList.toggle('active', s === 'A');
+      document.getElementById('tgSubP').classList.toggle('active', s === 'P');
+      document.getElementById('tgBar').style.display = s === 'A' ? '' : 'none';
+      document.getElementById('tgScroll').style.display = s === 'A' ? '' : 'none';
+      document.getElementById('tgPrinted').style.display = s === 'P' ? '' : 'none';
+      tgpCount(); if (s === 'P') tgpRender();
+    }
+    document.getElementById('tgSubA').addEventListener('click', () => tgSubSet('A'));
+    document.getElementById('tgSubP').addEventListener('click', () => tgSubSet('P'));
+    let tgpList = [];
+    async function tgpRender(keep) {
+      const sel = document.getElementById('tgpSel'), body = document.getElementById('tgpBody'), info = document.getElementById('tgpInfo');
+      try { tgpList = await arList('tgp', tgKind); } catch (e) { tgpList = []; }
+      tgpList.sort((a, b) => b.rec.date.localeCompare(a.rec.date));
+      const prev = keep || sel.value;
+      if (!tgpList.length) { sel.innerHTML = '<option>(kosong)</option>'; sel.disabled = true; body.innerHTML = '<div style="text-align:center;color:#777;padding:40px">Belum ada tagihan ' + tgKindName() + ' yang dicetak. Daftar tersimpan otomatis di sini setiap kali Anda menekan tombol 🖨 Cetak.</div>'; info.textContent = ''; return; }
+      sel.disabled = false;
+      sel.innerHTML = tgpList.map(x => '<option value="' + umEsc(x.key) + '">' + arDate(x.rec.date) + ' · ' + x.rec.items.length + ' faktur · dicetak ' + new Date(x.rec.saved).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) + '</option>').join('');
+      if (tgpList.some(x => x.key === prev)) sel.value = prev;
+      tgpShow();
+    }
+    function tgpShow() {
+      const it = tgpList.find(x => x.key === document.getElementById('tgpSel').value); if (!it) return;
+      document.getElementById('tgpBody').innerHTML = '<style>' + AR_CSS + '</style>' + arRenderTg(it.rec);
+      document.getElementById('tgpInfo').textContent = it.rec.items.length + ' faktur';
+    }
+    document.getElementById('tgpSel').addEventListener('change', tgpShow);
+    document.getElementById('tgpPrint').addEventListener('click', () => {
+      const it = tgpList.find(x => x.key === document.getElementById('tgpSel').value); if (!it) return;
+      const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+      document.body.appendChild(f);
+      const w = f.contentWindow; w.document.open();
+      w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Tagihan ' + tgKindName() + '</title><style>@page{size:A4 landscape;margin:8mm}body{margin:0}' + AR_CSS + '.ar-paper{zoom:.8}</style></head><body>' + arRenderTg(it.rec) + '</body></html>');
+      w.document.close();
+      setTimeout(() => { w.focus(); w.print(); setTimeout(() => f.remove(), 1500); }, 250);
+    });
+    document.getElementById('tgpDel').addEventListener('click', async () => {
+      const it = tgpList.find(x => x.key === document.getElementById('tgpSel').value); if (!it) return;
+      if (!confirm('Hapus data cetak ' + arDate(it.rec.date) + ' (' + it.rec.items.length + ' faktur)? Tidak bisa dikembalikan.')) return;
+      await arDel(it.key); tgpCount(); tgpRender();
+    });
+    tgpCount();
 
     loadBatal().then(loadHarga).then(umLoad).then(tgLoad).then(ttLoad).then(ibLoad).then(loadPJ);
   </script>
