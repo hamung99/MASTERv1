@@ -1515,7 +1515,8 @@
 
       let html = '<table><thead><tr>' +
         '<th class="um-chk" title="Centang semua faktur di tanggal yang sama (tanggal paling atas di halaman ini)"><input type="checkbox" class="um-pick-all"></th>' +
-        '<th>Tgl</th>' +
+        '<th>Tgl Faktur</th>' +
+        '<th>Tgl Tempo</th>' +
         '<th>No. Faktur</th>' +
         '<th>Sales</th>' +
         '<th>Customer</th>' +
@@ -1556,6 +1557,7 @@
         }
         const kat = MINYAK_RE.test(String(r.Produk || '')) ? 'MINYAK' : 'RUPA-RUPA';
         html += '<td class="center">' + (show ? (r.Tanggal || '') : '') + '</td>';
+        html += '<td class="center">' + (show ? tglTempoOf(r) : '') + '</td>';
         html += '<td class="center' + (show && invKind[fk] === 'NOL' ? ' fk-nol' : '') + (show && fk ? ' fk-link' : '') + '"' + (show && fk ? ' data-fk="' + pe(fk) + '" title="Klik: lihat detail / batalkan faktur atau item"' : '') + '>' + (show ? (r['No. Faktur'] || '') : '') + '</td>';
         html += '<td class="center">' + (show ? (r.Sales || '') : '') + '</td>';
         html += '<td class="col-customer">' + (show ? (r.Customer || '') : '') + '</td>';
@@ -1576,6 +1578,16 @@
       html += '</tbody></table>';
       container.innerHTML = html;
       renderPagination(key, totalPages);
+    }
+
+    /* Tgl Tempo = Tgl Faktur + 13 hari (sesuai faktur cetak), hanya untuk pembayaran Tempo */
+    function tglTempoOf(r) {
+      if (!/^tempo$/i.test(String(r.Pembayaran || '').trim())) return '';
+      const m = String(r.Tanggal || '').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (!m) return '';
+      let y = +m[3]; if (y < 100) y += 2000;
+      const d = new Date(y, +m[2] - 1, +m[1]); d.setDate(d.getDate() + 13);
+      return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(-2);
     }
 
     function renderPagination(key, totalPages) {
